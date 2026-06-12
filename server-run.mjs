@@ -1,6 +1,26 @@
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DIST_CLIENT = path.join(__dirname, "dist", "client");
 
 const PORT = parseInt(process.env.PORT || "3000", 10);
+
+const MIME_TYPES = {
+  ".js": "application/javascript",
+  ".css": "text/css",
+  ".html": "text/html",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
+};
 
 const serverModule = await import("./dist/server/server.js");
 const handler = serverModule.default;
@@ -13,6 +33,22 @@ function collectBody(req) {
   });
 }
 
+function serveStaticFile(res, filePath) {
+  try {
+    const content = fs.readFileSync(filePath);
+    const ext = path.extname(filePath);
+    const mime = MIME_TYPES[ext] || "application/octet-stream";
+    res.writeHead(200, {
+      "content-type": mime,
+      "cache-control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
+    });
+    res.end(content);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
@@ -20,6 +56,12 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/health") {
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ status: "ok", timestamp: new Date().toISOString() }));
+      return;
+    }
+
+    const staticFile = path.join(DIST_CLIENT, url.pathname);
+    if (fs.existsSync(staticFile) && fs.statSync(staticFile).isFile()) {
+      serveStaticFile(res, staticFile);
       return;
     }
 

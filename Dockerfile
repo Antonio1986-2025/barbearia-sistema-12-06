@@ -26,9 +26,11 @@ RUN npm run build
 # Expor porta 3000 (TanStack Start SSR)
 EXPOSE 3000
 
-# Variáveis de ambiente
+# Variáveis de ambiente (runtime)
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV SUPABASE_URL=https://cineibugpcuxvdkkwzau.supabase.co
+ENV SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpbmVpYnVncGN1eHZka2t3emF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMTkxOTYsImV4cCI6MjA5NTY5NTE5Nn0._ioSagsnR3wppw6du1zxCvW_Nuy3v6VwIfvQtQ2jxpI
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
