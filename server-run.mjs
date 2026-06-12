@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { fork } from "node:child_process";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_CLIENT = path.join(__dirname, "dist", "client");
@@ -102,4 +103,17 @@ server.listen(PORT, () => {
   console.log(`  Porta: ${PORT}`);
   console.log("========================================");
   console.log("");
+
+  const aiProcess = fork(path.join(__dirname, "ai-server.js"), [], {
+    env: { ...process.env, PORT: "3001" },
+    stdio: "inherit",
+  });
+
+  aiProcess.on("error", (err) => {
+    console.error("AI Agent error:", err);
+  });
+
+  aiProcess.on("exit", (code) => {
+    console.log(`AI Agent exited with code ${code}`);
+  });
 });

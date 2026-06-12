@@ -23,12 +23,14 @@ ENV VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 # Build do frontend (gera dist/ com client + server)
 RUN npm run build
 
-# Expor porta 3000 (TanStack Start SSR)
+# Expor portas (frontend: 3000, AI agent: 3001)
 EXPOSE 3000
+EXPOSE 3001
 
 # Variáveis de ambiente (runtime)
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV AI_PORT=3001
 ENV SUPABASE_URL=https://cineibugpcuxvdkkwzau.supabase.co
 ENV SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpbmVpYnVncGN1eHZka2t3emF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMTkxOTYsImV4cCI6MjA5NTY5NTE5Nn0._ioSagsnR3wppw6du1zxCvW_Nuy3v6VwIfvQtQ2jxpI
 
