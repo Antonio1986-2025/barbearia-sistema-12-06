@@ -271,32 +271,33 @@ async function criarAgendamento(context) {
     ? context.nome.trim()
     : `${context.nome.trim()} · ${context.dependente_nome?.trim()}`;
 
-  // UPSERT cliente - buscar ou criar
-  const { data: cliente, error: clienteError } = await supabase
+  // BUSCAR cliente existente pelo telefone (evita duplicidade)
+  let { data: cliente } = await supabase
     .from('clients')
-    .upsert(
-      {
+    .select('*')
+    .eq('tel', cleanPhone)
+    .maybeSingle();
+
+  if (!cliente) {
+    // Criar novo cliente
+    const { data: novoCliente, error: createError } = await supabase
+      .from('clients')
+      .insert({
         nome: context.nome.trim(),
         tel: cleanPhone,
-        visitas: 0,
+        visitas: 1,
         total_gasto: 0
-      },
-      { onConflict: 'tel', ignoreDuplicates: false }
-    )
-    .select()
-    .single();
-
-  if (clienteError) {
-    // Se der erro no upsert, tentar buscar o cliente existente
-    const { data: existingClient } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('tel', cleanPhone)
+      })
+      .select()
       .single();
-    
-    if (!existingClient) {
-      throw new Error('Erro ao criar/buscar cliente');
+
+    if (createError) {
+      throw new Error(`Erro ao criar cliente: ${createError.message}`);
     }
+    cliente = novoCliente;
+  } else if (cliente.nome !== context.nome.trim()) {
+    // Atualizar nome se mudou
+    await supabase.from('clients').update({ nome: context.nome.trim() }).eq('id', cliente.id);
   }
 
   // Criar agendamento
