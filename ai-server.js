@@ -9,7 +9,7 @@ import OpenAI from 'openai';
 import axios from 'axios';
 import { readFileSync } from 'fs';
 
-// Carregar .env
+// Carregar .env (opcional - em produção usa variáveis do ambiente)
 function loadEnv() {
   try {
     const envContent = readFileSync('.env', 'utf-8');
@@ -29,22 +29,28 @@ function loadEnv() {
       }
     });
     
+    console.log('✅ Arquivo .env carregado');
     return env;
   } catch (error) {
-    console.error('Erro ao ler .env:', error.message);
-    process.exit(1);
+    // Em produção, não precisa do .env (variáveis vêm do ambiente)
+    if (process.env.NODE_ENV === 'production') {
+      console.log('ℹ️ Rodando em produção - usando variáveis de ambiente');
+    } else {
+      console.warn('⚠️ Arquivo .env não encontrado:', error.message);
+    }
+    return {};
   }
 }
 
 loadEnv();
 
 // Configurações
-const PORT = process.env.AI_PORT || 3001;
+const PORT = process.env.PORT || process.env.AI_PORT || 3001;
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_MODEL = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-const EVOLUTION_URL = process.env.EVOLUTION_URL;
+const EVOLUTION_URL = process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL;
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
