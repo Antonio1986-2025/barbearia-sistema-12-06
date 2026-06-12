@@ -481,9 +481,9 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
 
   // Extrair "para quem é"
   if (conv.context.nome && !conv.context.para) {
-    if (msgLower === 'sim' || msgLower === 'pra mim' || msgLower === 'para mim') {
+    if (msgLower.includes('pra mim') || msgLower.includes('para mim') || msgLower === 'sim') {
       conv.context.para = 'mim';
-    } else if (msgLower === 'outra pessoa' || msgLower === 'outro' || msgLower === 'para outra pessoa') {
+    } else if (msgLower === 'outra pessoa' || msgLower === 'outro' || msgLower.includes('para outra')) {
       conv.context.para = 'outra';
     }
   }
