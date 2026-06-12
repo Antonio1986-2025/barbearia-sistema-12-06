@@ -116,13 +116,13 @@ SEU COMPORTAMENTO:
 
 FLUXO DE AGENDAMENTO:
 1. Cumprimente e pergunte como pode ajudar
-2. Capture o nome completo do cliente
-3. Pergunte para quem é o serviço (ele, filho, amigo)
-4. Se for outra pessoa, pegue o nome dela
-5. Mostre os barbeiros disponíveis (numere as opções)
-6. Aguarde escolha do barbeiro
-7. Mostre os serviços com preços (numere as opções)
-8. Aguarde escolha do serviço
+2. Pergunte o serviço que o cliente deseja (mostre as opções numeradas)
+3. Aguarde o cliente escolher o serviço pelo número
+4. Capture o nome completo do cliente
+5. Pergunte para quem é o serviço (ele, filho, amigo)
+6. Se for outra pessoa, pegue o nome dela
+7. Mostre os barbeiros disponíveis (numere as opções)
+8. Aguarde escolha do barbeiro pelo número
 9. Pergunte qual data prefere (próximos 7 dias úteis)
 10. Mostre horários disponíveis na data escolhida
 11. Aguarde escolha do horário
@@ -135,13 +135,28 @@ REGRAS IMPORTANTES:
 - Se não entender, peça clarificação
 - Uma pergunta por vez - não sobrecarregue o cliente
 - Seja paciente se o cliente demorar para responder
+- NUNCA pule etapas - siga a ordem acima
+- NÃO assuma qual serviço o cliente quer - pergunte e mostre opções numeradas
 
 EXEMPLO DE FLUXO:
 Cliente: "Oi, quero agendar"
-Você: "Olá! Seja bem-vindo à Barbearia Status! 😊 Para começar, qual é o seu nome completo?"
+Você: "Olá! Seja bem-vindo à Barbearia Status! 😊 Temos os seguintes serviços:
+1. Corte Masculino - R$ 45
+2. Corte e Barba - R$ 90
+3. Barba - R$ 50
+Qual você deseja?"
+
+Cliente: "2"
+Você: "Corte e Barba, ótima escolha! 😊 Qual é o seu nome completo?"
+
 Cliente: "João Silva"
 Você: "Prazer, João! O corte é para você mesmo?"
-...e assim por diante
+
+Cliente: "Sim"
+Você: "Perfeito! Com qual barbeiro você prefere?
+1. LUAN
+2. FELIPE
+..."
 
 Quando o cliente confirmar TODOS os dados, responda APENAS: CONFIRMAR_AGENDAMENTO`;
 
@@ -659,11 +674,14 @@ app.get('/health', (req, res) => {
  */
 async function downloadMedia(messageKey) {
   const { data } = await axios({
-    method: 'GET',
-    url: `${EVOLUTION_URL}/message/getMedia/${EVOLUTION_INSTANCE}/${messageKey}`,
-    headers: { apikey: EVOLUTION_API_KEY },
-    responseType: 'arraybuffer',
+    method: 'POST',
+    url: `${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`,
+    headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' },
+    data: { message: { key: { id: messageKey } }, convertToMp4: false },
   });
+  if (data.base64) {
+    return Buffer.from(data.base64, 'base64');
+  }
   return Buffer.from(data);
 }
 
@@ -706,20 +724,23 @@ app.post('/webhook', async (req, res) => {
     if (audioMsg) {
       console.log(`🎵 [${phone}]: Áudio recebido`);
       res.json({ ok: true });
-      const audioBuffer = await downloadMedia(message.key.id);
-      const transcription = await transcribeAudio(audioBuffer);
-      console.log(`📝 [${phone}]: Transcrição: ${transcription}`);
-      processarMensagem(phone, transcription).catch(err => console.error('Erro:', err));
+      downloadMedia(message.key.id).then(audioBuffer => {
+        return transcribeAudio(audioBuffer);
+      }).then(transcription => {
+        console.log(`📝 [${phone}]: Transcrição: ${transcription}`);
+        return processarMensagem(phone, transcription);
+      }).catch(err => console.error('Erro ao processar áudio:', err.message || err));
       return;
     }
 
     if (imageMsg) {
       console.log(`🖼️ [${phone}]: Imagem recebida`);
       res.json({ ok: true });
-      const imageBuffer = await downloadMedia(message.key.id);
-      const imageBase64 = imageBuffer.toString('base64');
-      const mimeType = imageMsg.mimetype || 'image/jpeg';
-      processarMensagem(phone, caption || '[Imagem enviada]', imageBase64, mimeType).catch(err => console.error('Erro:', err));
+      downloadMedia(message.key.id).then(imageBuffer => {
+        const imageBase64 = imageBuffer.toString('base64');
+        const mimeType = imageMsg.mimetype || 'image/jpeg';
+        return processarMensagem(phone, caption || '[Imagem enviada]', imageBase64, mimeType);
+      }).catch(err => console.error('Erro ao processar imagem:', err.message || err));
       return;
     }
 
