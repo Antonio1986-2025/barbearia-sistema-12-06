@@ -144,8 +144,6 @@ Você: "Perfeito, João! Deixa eu confirmar:
 - Horário: 15h
 Tudo certo?"`;
 
-Quando o cliente confirmar TODOS os dados, responda APENAS: CONFIRMAR_AGENDAMENTO`;
-
 /**
  * Envia mensagem via WhatsApp
  */
