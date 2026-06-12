@@ -467,9 +467,9 @@ async function processarMensagem(phone, userMessage) {
     const hoje = new Date();
     const hojeStr = hoje.toISOString().split('T')[0];
 
-    if (msgLower === 'hoje' || msgLower === 'hoje mesmo') {
+    if (msgLower === 'hoje' || msgLower === 'hoje mesmo' || msgLower === 'hj' || msgLower === 'hje' || msgLower === 'agr' || msgLower === 'agora') {
       conv.context.data = hojeStr;
-    } else if (msgLower === 'amanhã' || msgLower === 'amanha') {
+    } else if (msgLower === 'amanhã' || msgLower === 'amanha' || msgLower === 'amm' || msgLower === 'amh') {
       const amanha = new Date(hoje);
       amanha.setDate(amanha.getDate() + 1);
       conv.context.data = amanha.toISOString().split('T')[0];
