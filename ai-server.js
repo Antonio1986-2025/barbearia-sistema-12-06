@@ -74,6 +74,7 @@ if (!EVOLUTION_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
 
 // Clientes
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+console.log(`🔐 Supabase URL: ${SUPABASE_URL.substring(0, 30)}... key: ${SUPABASE_KEY.substring(0, 15)}...`);
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
 // Armazenamento de conversas (em memória)
@@ -174,6 +175,8 @@ async function buscarDados() {
     supabase.from('services').select('id, nome, duracao, preco').eq('ativo', true).order('ordem'),
     supabase.from('settings').select('*').maybeSingle()
   ]);
+
+  console.log(`📊 DB: professionals=${prosResult.data?.length || 0} services=${svcsResult.data?.length || 0} erros: ${prosResult.error ? 'pro=' + prosResult.error.message : 'none'} ${svcsResult.error ? 'svc=' + svcsResult.error.message : 'none'}`);
 
   return {
     professionals: prosResult.data || [],
