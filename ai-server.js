@@ -9,6 +9,7 @@ import OpenAI from 'openai';
 import axios from 'axios';
 import { readFileSync } from 'fs';
 import fetch from 'node-fetch';
+import { Buffer } from 'buffer';
 
 // Carregar .env (opcional - em produção usa variáveis do ambiente)
 function loadEnv() {
@@ -355,7 +356,7 @@ async function criarAgendamento(context) {
 /**
  * Processa mensagem
  */
-async function processarMensagem(phone, userMessage) {
+async function processarMensagem(phone, userMessage, imageBase64 = null, mimeType = null) {
   // Recuperar ou criar conversa
   let conv = conversations.get(phone);
   
@@ -419,7 +420,17 @@ async function processarMensagem(phone, userMessage) {
   }
 
   // Adicionar mensagem ao histórico
-  conv.history.push({ role: 'user', content: userMessage });
+  if (imageBase64) {
+    conv.history.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: userMessage || '[Imagem enviada]' },
+        { type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } }
+      ]
+    });
+  } else {
+    conv.history.push({ role: 'user', content: userMessage });
+  }
 
   // Chamar OpenAI
   const messages = [
@@ -428,10 +439,10 @@ async function processarMensagem(phone, userMessage) {
   ];
 
   const completion = await openai.chat.completions.create({
-    model: OPENAI_MODEL,
+    model: imageBase64 ? 'gpt-4o-mini' : OPENAI_MODEL,
     messages,
     temperature: 0.7,
-    max_tokens: 300
+    max_tokens: imageBase64 ? 500 : 300
   });
 
   const resposta = completion.choices[0].message.content;
@@ -628,6 +639,31 @@ app.get('/health', (req, res) => {
   });
 });
 
+/**
+ * Baixa mídia da Evolution API
+ */
+async function downloadMedia(messageKey) {
+  const { data } = await axios({
+    method: 'GET',
+    url: `${EVOLUTION_URL}/message/getMedia/${EVOLUTION_INSTANCE}/${messageKey}`,
+    headers: { apikey: EVOLUTION_API_KEY },
+    responseType: 'arraybuffer',
+  });
+  return Buffer.from(data);
+}
+
+/**
+ * Transcreve áudio usando Whisper
+ */
+async function transcribeAudio(audioBuffer) {
+  const audioFile = new File([audioBuffer], 'audio.ogg', { type: 'audio/ogg' });
+  const transcription = await openai.audio.transcriptions.create({
+    model: 'whisper-1',
+    file: audioFile,
+  });
+  return transcription.text;
+}
+
 // Webhook
 app.post('/webhook', async (req, res) => {
   try {
@@ -646,17 +682,40 @@ app.post('/webhook', async (req, res) => {
     }
 
     const phone = message.key.remoteJid.replace('@s.whatsapp.net', '');
-    const userMessage = message.message?.conversation || 
-                       message.message?.extendedTextMessage?.text || '';
+    const msgText = message.message?.conversation || 
+                    message.message?.extendedTextMessage?.text || '';
+    const audioMsg = message.message?.audioMessage;
+    const imageMsg = message.message?.imageMessage;
+    const caption = imageMsg?.caption || '';
 
-    if (!userMessage) {
+    if (audioMsg) {
+      console.log(`🎵 [${phone}]: Áudio recebido`);
+      res.json({ ok: true });
+      const audioBuffer = await downloadMedia(message.key.id);
+      const transcription = await transcribeAudio(audioBuffer);
+      console.log(`📝 [${phone}]: Transcrição: ${transcription}`);
+      processarMensagem(phone, transcription).catch(err => console.error('Erro:', err));
+      return;
+    }
+
+    if (imageMsg) {
+      console.log(`🖼️ [${phone}]: Imagem recebida`);
+      res.json({ ok: true });
+      const imageBuffer = await downloadMedia(message.key.id);
+      const imageBase64 = imageBuffer.toString('base64');
+      const mimeType = imageMsg.mimetype || 'image/jpeg';
+      processarMensagem(phone, caption || '[Imagem enviada]', imageBase64, mimeType).catch(err => console.error('Erro:', err));
+      return;
+    }
+
+    if (!msgText) {
       return res.json({ ok: true });
     }
 
-    console.log(`📱 [${phone}]: ${userMessage}`);
+    console.log(`📱 [${phone}]: ${msgText}`);
 
     // Processar em background
-    processarMensagem(phone, userMessage).catch(err => {
+    processarMensagem(phone, msgText).catch(err => {
       console.error('Erro ao processar:', err);
     });
 
