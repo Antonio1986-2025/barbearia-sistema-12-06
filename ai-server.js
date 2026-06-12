@@ -234,6 +234,22 @@ async function criarAgendamento(context) {
     .eq('id', context.servico_id)
     .single();
 
+  if (!pro) {
+    throw new Error(`Profissional não encontrado (ID: ${context.prof_id}). Barbeiros disponíveis: ${context.prof_id}`);
+  }
+
+  if (!svc) {
+    throw new Error(`Serviço não encontrado (ID: ${context.servico_id}). Serviços disponíveis: ${context.servico_id}`);
+  }
+
+  if (!context.data) {
+    throw new Error('Data não informada');
+  }
+
+  if (!context.hora) {
+    throw new Error('Horário não informado');
+  }
+
   const clienteFinal = context.para === 'mim'
     ? context.nome.trim()
     : `${context.nome.trim()} · ${context.dependente_nome?.trim()}`;
@@ -407,31 +423,117 @@ async function processarMensagem(phone, userMessage) {
   conv.history.push({ role: 'assistant', content: resposta });
 
   // Extrair informações (parsing simples)
-  if (!conv.context.nome && userMessage.length > 5) {
-    // Tentar extrair nome
+  const msgLower = userMessage.trim().toLowerCase();
+
+  // Extrair nome (se ainda não tem e mensagem parece um nome)
+  if (!conv.context.nome && userMessage.length > 3) {
     const palavras = userMessage.trim().split(/\s+/);
-    if (palavras.length >= 2 && palavras.length <= 4) {
+    if (palavras.length >= 2 && palavras.length <= 5) {
       conv.context.nome = userMessage.trim();
     }
   }
 
-  // Extrair escolhas por número ou nome
-  professionals.forEach((p, i) => {
-    if (userMessage.includes(String(i + 1)) || 
-        userMessage.toLowerCase().includes(p.nome.toLowerCase())) {
-      conv.context.prof_id = p.id;
+  // Extrair "para quem é"
+  if (conv.context.nome && !conv.context.para) {
+    if (msgLower === 'sim' || msgLower === 'pra mim' || msgLower === 'para mim') {
+      conv.context.para = 'mim';
+    } else if (msgLower === 'outra pessoa' || msgLower === 'outro' || msgLower === 'para outra pessoa') {
+      conv.context.para = 'outra';
     }
-  });
+  }
 
-  services.forEach((s, i) => {
-    if (userMessage.includes(String(i + 1)) || 
-        userMessage.toLowerCase().includes(s.nome.toLowerCase())) {
-      conv.context.servico_id = s.id;
+  // Extrair nome do dependente (se para = outra)
+  if (conv.context.para === 'outra' && !conv.context.dependente_nome && userMessage.length > 2) {
+    conv.context.dependente_nome = userMessage.trim();
+  }
+
+  // Extrair data
+  if (!conv.context.data) {
+    const hoje = new Date();
+    const hojeStr = hoje.toISOString().split('T')[0];
+
+    if (msgLower === 'hoje' || msgLower === 'hoje mesmo') {
+      conv.context.data = hojeStr;
+    } else if (msgLower === 'amanhã' || msgLower === 'amanha') {
+      const amanha = new Date(hoje);
+      amanha.setDate(amanha.getDate() + 1);
+      conv.context.data = amanha.toISOString().split('T')[0];
+    } else {
+      // Tentar extrair data no formato DD/MM ou DD-MM
+      const dateMatch = userMessage.match(/(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?/);
+      if (dateMatch) {
+        const day = dateMatch[1].padStart(2, '0');
+        const month = dateMatch[2].padStart(2, '0');
+        const year = dateMatch[3] ? dateMatch[3].padStart(4, '20') : String(hoje.getFullYear());
+        conv.context.data = `${year}-${month}-${day}`;
+      }
     }
-  });
+  }
+
+  // Extrair hora
+  if (!conv.context.hora) {
+    const timeMatch = userMessage.match(/(\d{1,2})[h:](\d{2})/);
+    if (timeMatch) {
+      conv.context.hora = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+    }
+  }
+
+  // Extrair barbeiro por nome (case-insensitive, parcial)
+  if (!conv.context.prof_id) {
+    for (const p of professionals) {
+      if (msgLower.includes(p.nome.toLowerCase()) || p.nome.toLowerCase().includes(msgLower)) {
+        conv.context.prof_id = p.id;
+        break;
+      }
+    }
+  }
+
+  // Extrair barbeiro por número (se ainda não tem profissional)
+  if (!conv.context.prof_id) {
+    const numMatch = msgLower.match(/^(\d+)$/);
+    if (numMatch && !conv.context.servico_id) {
+      const idx = parseInt(numMatch[1]) - 1;
+      if (idx >= 0 && idx < professionals.length) {
+        conv.context.prof_id = professionals[idx].id;
+      }
+    }
+  }
+
+  // Extrair serviço por nome ou número
+  if (!conv.context.servico_id) {
+    for (const s of services) {
+      if (msgLower.includes(s.nome.toLowerCase()) || s.nome.toLowerCase().includes(msgLower)) {
+        conv.context.servico_id = s.id;
+        break;
+      }
+    }
+  }
+
+  // Extrair serviço por número (só se já tem profissional)
+  if (!conv.context.servico_id && conv.context.prof_id) {
+    const numMatch = msgLower.match(/^(\d+)$/);
+    if (numMatch) {
+      const idx = parseInt(numMatch[1]) - 1;
+      if (idx >= 0 && idx < services.length) {
+        conv.context.servico_id = services[idx].id;
+      }
+    }
+  }
 
   // Verificar se deve confirmar
   if (resposta.includes('CONFIRMAR_AGENDAMENTO')) {
+    // Verificar se todos os dados obrigatórios estão preenchidos
+    const missing = [];
+    if (!conv.context.prof_id) missing.push('barbeiro');
+    if (!conv.context.servico_id) missing.push('serviço');
+    if (!conv.context.data) missing.push('data');
+    if (!conv.context.hora) missing.push('horário');
+
+    if (missing.length > 0) {
+      await sendWhatsApp(phone, `Faltam informações para confirmar: ${missing.join(', ')}. Pode me informar?`);
+      return;
+    }
+
     try {
       const { appt, pro, svc } = await criarAgendamento(conv.context);
 
