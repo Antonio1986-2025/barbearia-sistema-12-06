@@ -25,7 +25,9 @@ function loadEnv() {
         let value = match[2].trim();
         value = value.replace(/^["']|["']$/g, '');
         env[key] = value;
-        process.env[key] = value;
+        if (!process.env[key]) {
+          process.env[key] = value;
+        }
       }
     });
     
