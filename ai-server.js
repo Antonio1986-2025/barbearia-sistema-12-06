@@ -222,24 +222,31 @@ async function criarAgendamento(context) {
   const cleanPhone = context.telefone.replace(/\D/g, '');
 
   // Buscar profissional e serviço
-  const { data: pro } = await supabase
+  const { data: pro, error: proError } = await supabase
     .from('professionals')
     .select('*')
     .eq('id', context.prof_id)
     .single();
 
-  const { data: svc } = await supabase
+  const { data: svc, error: svcError } = await supabase
     .from('services')
     .select('*')
     .eq('id', context.servico_id)
     .single();
 
+  console.log(`🔍 Buscando prof_id=${context.prof_id} → ${pro ? 'encontrado: ' + pro.nome : 'NULL'}${proError ? ' ERRO: ' + proError.message : ''}`);
+  console.log(`🔍 Buscando servico_id=${context.servico_id} → ${svc ? 'encontrado: ' + svc.nome : 'NULL'}${svcError ? ' ERRO: ' + svcError.message : ''}`);
+
   if (!pro) {
-    throw new Error(`Profissional não encontrado (ID: ${context.prof_id}). Barbeiros disponíveis: ${context.prof_id}`);
+    const { data: allPros } = await supabase.from('professionals').select('id, nome');
+    console.log(`📋 Profissionais disponíveis: ${JSON.stringify(allPros)}`);
+    throw new Error(`Profissional não encontrado (ID: ${context.prof_id})`);
   }
 
   if (!svc) {
-    throw new Error(`Serviço não encontrado (ID: ${context.servico_id}). Serviços disponíveis: ${context.servico_id}`);
+    const { data: allSvcs } = await supabase.from('services').select('id, nome');
+    console.log(`📋 Serviços disponíveis: ${JSON.stringify(allSvcs)}`);
+    throw new Error(`Serviço não encontrado (ID: ${context.servico_id})`);
   }
 
   if (!context.data) {
@@ -505,6 +512,9 @@ async function processarMensagem(phone, userMessage) {
       const idx = parseInt(numMatch[1]) - 1;
       if (idx >= 0 && idx < professionals.length) {
         conv.context.prof_id = professionals[idx].id;
+        console.log(`🔍 Profissional #${numMatch[1]} → ${professionals[idx].nome} (id: ${professionals[idx].id})`);
+      } else {
+        console.log(`⚠️ Profissional #${numMatch[1]} não existe. Total: ${professionals.length}`);
       }
     }
   }
@@ -526,12 +536,17 @@ async function processarMensagem(phone, userMessage) {
       const idx = parseInt(numMatch[1]) - 1;
       if (idx >= 0 && idx < services.length) {
         conv.context.servico_id = services[idx].id;
+        console.log(`🔍 Serviço #${numMatch[1]} → ${services[idx].nome} (id: ${services[idx].id})`);
+      } else {
+        console.log(`⚠️ Serviço #${numMatch[1]} não existe. Total: ${services.length}`);
       }
     }
   }
 
   // Verificar se deve confirmar
   if (resposta.includes('CONFIRMAR_AGENDAMENTO')) {
+    console.log(`🔍 Contexto antes de criar agendamento:`, JSON.stringify(conv.context, null, 2));
+
     // Verificar se todos os dados obrigatórios estão preenchidos
     const missing = [];
     if (!conv.context.prof_id) missing.push('barbeiro');
@@ -540,7 +555,9 @@ async function processarMensagem(phone, userMessage) {
     if (!conv.context.hora) missing.push('horário');
 
     if (missing.length > 0) {
-      await sendWhatsApp(phone, `Faltam informações para confirmar: ${missing.join(', ')}. Pode me informar?`);
+      const msg = `Faltam informações para confirmar: ${missing.join(', ')}. Pode me informar?`;
+      console.log(`⚠️ Dados faltantes: ${missing.join(', ')}`);
+      await sendWhatsApp(phone, msg);
       return;
     }
 
