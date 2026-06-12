@@ -238,16 +238,33 @@ async function criarAgendamento(context) {
     ? context.nome.trim()
     : `${context.nome.trim()} · ${context.dependente_nome?.trim()}`;
 
-  // UPSERT cliente
-  await supabase.from('clients').upsert(
-    {
-      nome: context.nome.trim(),
-      tel: cleanPhone,
-      visitas: 0,
-      total_gasto: 0
-    },
-    { onConflict: 'tel', ignoreDuplicates: false }
-  );
+  // UPSERT cliente - buscar ou criar
+  const { data: cliente, error: clienteError } = await supabase
+    .from('clients')
+    .upsert(
+      {
+        nome: context.nome.trim(),
+        tel: cleanPhone,
+        visitas: 0,
+        total_gasto: 0
+      },
+      { onConflict: 'tel', ignoreDuplicates: false }
+    )
+    .select()
+    .single();
+
+  if (clienteError) {
+    // Se der erro no upsert, tentar buscar o cliente existente
+    const { data: existingClient } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('tel', cleanPhone)
+      .single();
+    
+    if (!existingClient) {
+      throw new Error('Erro ao criar/buscar cliente');
+    }
+  }
 
   // Criar agendamento
   const { data: appt } = await supabase
