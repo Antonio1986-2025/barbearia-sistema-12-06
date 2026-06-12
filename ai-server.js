@@ -470,11 +470,21 @@ async function processarMensagem(phone, userMessage) {
     }
   }
 
-  // Extrair hora
-  if (!conv.context.hora) {
+  // Extrair hora (só se já tem profissional E serviço — senão "15" pode ser escolha de barbeiro/serviço)
+  if (!conv.context.hora && conv.context.prof_id && conv.context.servico_id) {
+    // "18:00", "18h00", "18h"
     const timeMatch = userMessage.match(/(\d{1,2})[h:](\d{2})/);
     if (timeMatch) {
       conv.context.hora = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+    } else {
+      // "às 15", "as 15", "15 horas" — hora sem minutos
+      const hourOnly = userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i);
+      if (hourOnly) {
+        const h = parseInt(hourOnly[1]);
+        if (h >= 8 && h <= 20) {
+          conv.context.hora = `${String(h).padStart(2, '0')}:00`;
+        }
+      }
     }
   }
 
