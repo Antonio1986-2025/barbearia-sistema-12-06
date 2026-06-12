@@ -456,8 +456,8 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     const nomeMatch = userMessage.match(/(?:meu nome é|me chamo|sou o? a?|meu nome|nome é|me dá|pode me chamar)\s+(.+)/i);
     if (nomeMatch) {
       let nome = nomeMatch[1].trim().replace(/[.!?,;]+$/, '');
-      // Cortar no " e ", " pra ", " para ", " é ", " do ", " da ", " de " (fim do nome)
-      const fimNome = nome.search(/\s+(e|pra|para|é|vou|quero|preciso|gostaria|agendar|marcar|hoje|amanhã|às|as|horas?|do|da|de)\s+/i);
+      // Cortar em palavras que marcam fim do nome
+      const fimNome = nome.search(/\s+(e|pra|para|é|vou|quero|preciso|gostaria|agendar|marcar|hoje|amanhã|às|as|horas?|do|da|de|como|com|se|seu|sua|meu|minha|tem|ter|ser|no|na|em|um|uma)\s+/i);
       if (fimNome > 0) {
         nome = nome.substring(0, fimNome);
       }
@@ -518,27 +518,39 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
 
   // Extrair hora (só se já tem profissional E serviço — senão "15" pode ser escolha de barbeiro/serviço)
   if (!conv.context.hora && conv.context.prof_id && conv.context.servico_id) {
-    // "18:00", "18h00", "18h"
+    // "18:00", "18h00"
     const timeMatch = userMessage.match(/(\d{1,2})[h:](\d{2})/);
     if (timeMatch) {
       conv.context.hora = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
     } else {
-      // "às 15", "as 15", "15 horas" — hora sem minutos
-      const hourOnly = userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i);
-      if (hourOnly) {
-        const h = parseInt(hourOnly[1]);
+      // "19h", "9h" — hora sem minutos
+      const horaSimples = userMessage.match(/\b(\d{1,2})h\b/i);
+      if (horaSimples) {
+        const h = parseInt(horaSimples[1]);
         if (h >= 8 && h <= 20) {
           conv.context.hora = `${String(h).padStart(2, '0')}:00`;
+        }
+      } else {
+        // "às 15", "as 15", "15 horas" — hora sem minutos
+        const hourOnly = userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i);
+        if (hourOnly) {
+          const h = parseInt(hourOnly[1]);
+          if (h >= 8 && h <= 20) {
+            conv.context.hora = `${String(h).padStart(2, '0')}:00`;
+          }
         }
       }
     }
   }
 
-  // Extrair barbeiro por nome (case-insensitive, parcial)
+  // Extrair barbeiro por nome (case-insensitive, parcial, sem acentos)
   if (!conv.context.prof_id) {
+    const msgNoAccent = msgLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     for (const p of professionals) {
-      if (msgLower.includes(p.nome.toLowerCase()) || p.nome.toLowerCase().includes(msgLower)) {
+      const nomeNoAccent = p.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (msgNoAccent.includes(nomeNoAccent) || nomeNoAccent.includes(msgNoAccent)) {
         conv.context.prof_id = p.id;
+        console.log(`🔍 Profissional por nome: "${msgLower}" → ${p.nome} (id: ${p.id})`);
         break;
       }
     }
@@ -558,11 +570,14 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     }
   }
 
-  // Extrair serviço por nome ou número
+  // Extrair serviço por nome (case-insensitive, parcial, sem acentos)
   if (!conv.context.servico_id) {
+    const msgNoAccent = msgLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     for (const s of services) {
-      if (msgLower.includes(s.nome.toLowerCase()) || s.nome.toLowerCase().includes(msgLower)) {
+      const nomeNoAccent = s.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      if (msgNoAccent.includes(nomeNoAccent) || nomeNoAccent.includes(msgNoAccent)) {
         conv.context.servico_id = s.id;
+        console.log(`🔍 Serviço por nome: "${msgLower}" → ${s.nome} (id: ${s.id})`);
         break;
       }
     }
