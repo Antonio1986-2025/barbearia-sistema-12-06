@@ -24,6 +24,9 @@ RUN npm run build
 # Stage 2: Production
 FROM nginx:alpine
 
+# Remover arquivos padrão do Nginx
+RUN rm -rf /usr/share/nginx/html/*
+
 # Copiar build do stage anterior
 COPY --from=builder /app/dist/client /usr/share/nginx/html
 
