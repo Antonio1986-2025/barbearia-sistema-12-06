@@ -1,0 +1,2 @@
+ALTER TABLE public.commands DROP CONSTRAINT IF EXISTS commands_status_check;
+ALTER TABLE public.commands ADD CONSTRAINT commands_status_check CHECK (status = ANY (ARRAY['aberta'::text, 'finalizada'::text, 'cancelada'::text, 'paga'::text]));
