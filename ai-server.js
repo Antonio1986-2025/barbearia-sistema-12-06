@@ -8,6 +8,7 @@ import { createClient } from '@supabase/supabase-js';
 import OpenAI from 'openai';
 import axios from 'axios';
 import { readFileSync } from 'fs';
+import fetch from 'node-fetch';
 
 // Carregar .env (opcional - em produção usa variáveis do ambiente)
 function loadEnv() {
@@ -73,7 +74,9 @@ if (!EVOLUTION_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
 }
 
 // Clientes
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  global: { fetch }
+});
 console.log(`🔐 Supabase URL: ${SUPABASE_URL.substring(0, 30)}... key: ${SUPABASE_KEY.substring(0, 15)}...`);
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 
