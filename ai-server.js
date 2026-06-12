@@ -455,8 +455,13 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
   if (!conv.context.nome && userMessage.length > 3) {
     const nomeMatch = userMessage.match(/(?:meu nome é|me chamo|sou o? a?|meu nome|nome é|me dá|pode me chamar)\s+(.+)/i);
     if (nomeMatch) {
-      const nome = nomeMatch[1].trim().replace(/[.!?,;]+$/, '');
-      if (nome.length > 2 && nome.length < 50) {
+      let nome = nomeMatch[1].trim().replace(/[.!?,;]+$/, '');
+      // Cortar no " e ", " pra ", " para ", " é ", " do ", " da ", " de " (fim do nome)
+      const fimNome = nome.search(/\s+(e|pra|para|é|vou|quero|preciso|gostaria|agendar|marcar|hoje|amanhã|às|as|horas?|do|da|de)\s+/i);
+      if (fimNome > 0) {
+        nome = nome.substring(0, fimNome);
+      }
+      if (nome.length > 2 && nome.length < 50 && /\s/.test(nome)) {
         conv.context.nome = nome;
         console.log(`🔍 Nome extraído: ${conv.context.nome}`);
       }
@@ -493,11 +498,11 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     const hoje = new Date();
     const hojeStr = hoje.toISOString().split('T')[0];
 
-    if (msgLower === 'hoje' || msgLower === 'hoje mesmo' || msgLower === 'hj' || msgLower === 'hje' || msgLower === 'agr' || msgLower === 'agora') {
+    if (/\b(hoje|hj|hje|agr|agora)\b/i.test(msgLower)) {
       conv.context.data = hojeStr;
-    } else if (msgLower === 'amanhã' || msgLower === 'amanha' || msgLower === 'amm' || msgLower === 'amh') {
+    } else if (/\b(amanhã|amanha|amm|amh)\b/i.test(msgLower) || /\bdepois de amanh[ãa]\b/i.test(msgLower)) {
       const amanha = new Date(hoje);
-      amanha.setDate(amanha.getDate() + 1);
+      amanha.setDate(amanha.getDate() + (msgLower.includes('depois') ? 2 : 1));
       conv.context.data = amanha.toISOString().split('T')[0];
     } else {
       // Tentar extrair data no formato DD/MM ou DD-MM
