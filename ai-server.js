@@ -451,11 +451,26 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
   // Extrair informações (parsing simples)
   const msgLower = userMessage.trim().toLowerCase();
 
-  // Extrair nome (se ainda não tem e mensagem parece um nome)
+  // Extrair nome (só quando explícito: "meu nome é", "me chamo", "sou", "meu nome", etc.)
   if (!conv.context.nome && userMessage.length > 3) {
-    const palavras = userMessage.trim().split(/\s+/);
-    if (palavras.length >= 2 && palavras.length <= 5) {
-      conv.context.nome = userMessage.trim();
+    const nomeMatch = userMessage.match(/(?:meu nome é|me chamo|sou o? a?|meu nome|nome é|me dá|pode me chamar)\s+(.+)/i);
+    if (nomeMatch) {
+      const nome = nomeMatch[1].trim().replace(/[.!?,;]+$/, '');
+      if (nome.length > 2 && nome.length < 50) {
+        conv.context.nome = nome;
+        console.log(`🔍 Nome extraído: ${conv.context.nome}`);
+      }
+    }
+    // Fallback: se são 2-3 palavras com inicial maiúscula, parece nome proprio
+    if (!conv.context.nome) {
+      const palavras = userMessage.trim().split(/\s+/);
+      const palavrasIgnoradas = ['quero', 'vou', 'preciso', 'gostaria', 'fazer', 'corte', 'cortar', 'barba', 'cabelo', 'hoje', 'amanhã', 'agendar', 'marcar', 'quero', 'sim', 'não', 'ok', 'blz', 'pra', 'para', 'mim', 'obrigado', 'obrigada', 'oi', 'olá', 'bom', 'boa', 'dia', 'tarde', 'noite'];
+      if (palavras.length >= 2 && palavras.length <= 3 &&
+          palavras.every(p => /^[A-ZÁÉÍÓÚÃÕÂÊÎÔÛÇ]/.test(p)) &&
+          palavras.every(p => !palavrasIgnoradas.includes(p.toLowerCase()))) {
+        conv.context.nome = userMessage.trim();
+        console.log(`🔍 Nome extraído (heurística): ${conv.context.nome}`);
+      }
     }
   }
 
