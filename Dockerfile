@@ -16,6 +16,10 @@ RUN npm install
 # Copiar código fonte
 COPY . .
 
+# Variáveis VITE precisam estar disponíveis ANTES do build (vite build as embute no JS)
+ENV VITE_SUPABASE_URL=https://cineibugpcuxvdkkwzau.supabase.co
+ENV VITE_SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpbmVpYnVncGN1eHZka2t3emF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMTkxOTYsImV4cCI6MjA5NTY5NTE5Nn0._ioSagsnR3wppw6du1zxCvW_Nuy3v6VwIfvQtQ2jxpI
+
 # Build do frontend (gera dist/ com client + server)
 RUN npm run build
 
