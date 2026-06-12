@@ -1,16 +1,12 @@
 # ==========================================
-# Dockerfile para AI Agent - Barbearia Status
-# Runtime: Node.js 22
-# App: Express + OpenAI + Supabase
+# Dockerfile para Frontend - Barbearia Status
+# Build: Vite + React
+# Serve: Nginx
 # ==========================================
 
-FROM node:22-alpine
+# Stage 1: Build
+FROM node:22-alpine AS builder
 
-# Metadados
-LABEL maintainer="Barbearia Status"
-LABEL description="AI Agent for WhatsApp booking"
-
-# Criar diretório da aplicação
 WORKDIR /app
 
 # Copiar package files
@@ -20,22 +16,22 @@ COPY package*.json ./
 RUN npm install
 
 # Copiar código fonte
-COPY ai-server.js ./
-COPY src/ ./src/
+COPY . .
 
-# Criar pasta de logs
-RUN mkdir -p logs
+# Build do frontend (gera dist/client)
+RUN npm run build
 
-# Expor porta
-EXPOSE 3001
+# Stage 2: Production
+FROM nginx:alpine
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:3001/health || exit 1
+# Copiar build do stage anterior
+COPY --from=builder /app/dist/client /usr/share/nginx/html
 
-# Variáveis de ambiente padrão (podem ser sobrescritas)
-ENV NODE_ENV=production
-ENV PORT=3001
+# Copiar configuração customizada do Nginx
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Iniciar aplicação
-CMD ["node", "ai-server.js"]
+# Expor porta 80
+EXPOSE 80
+
+# Iniciar Nginx
+CMD ["nginx", "-g", "daemon off;"]
