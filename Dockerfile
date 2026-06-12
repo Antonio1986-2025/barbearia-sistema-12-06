@@ -1,11 +1,9 @@
 # ==========================================
-# Dockerfile para Frontend - Barbearia Status
-# Build: Vite + React
-# Serve: Nginx
+# Dockerfile para Frontend - Barbearia Status  
+# Runtime: Node.js com TanStack Start
 # ==========================================
 
-# Stage 1: Build
-FROM node:22-alpine AS builder
+FROM node:22-alpine
 
 WORKDIR /app
 
@@ -18,23 +16,15 @@ RUN npm install
 # Copiar código fonte
 COPY . .
 
-# Build do frontend (gera dist/client)
+# Build do frontend
 RUN npm run build
 
-# Stage 2: Production
-FROM nginx:alpine
+# Expor porta 3000 (porta padrão do TanStack Start)
+EXPOSE 3000
 
-# Remover arquivos padrão do Nginx
-RUN rm -rf /usr/share/nginx/html/*
+# Variáveis de ambiente
+ENV NODE_ENV=production
+ENV PORT=3000
 
-# Copiar build do stage anterior
-COPY --from=builder /app/dist/client /usr/share/nginx/html
-
-# Copiar configuração customizada do Nginx
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-# Expor porta 80
-EXPOSE 80
-
-# Iniciar Nginx
-CMD ["nginx", "-g", "daemon off;"]
+# Iniciar servidor TanStack Start
+CMD ["npm", "run", "start"]
