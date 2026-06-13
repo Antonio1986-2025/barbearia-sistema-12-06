@@ -111,18 +111,20 @@ function AgendaPage() {
         </div>
       </div>
 
-      <div className="bs-card overflow-auto">
-        <div className="hidden md:block min-w-[720px] grid" style={{ gridTemplateColumns: `80px repeat(${pros.length}, 1fr)` }}>
-          <div className="sticky top-0 z-10 bg-card border-b border-border p-3 text-xs font-semibold text-muted-foreground uppercase">Hora</div>
-          {pros.map((p) => (
-            <div key={p.id} className="sticky top-0 z-10 bg-card border-b border-l border-border p-3 flex items-center gap-2">
-              <span className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold"
+      <div className="bs-card overflow-auto rounded-xl">
+        <div className="hidden md:block min-w-[800px] grid" style={{
+          gridTemplateColumns: `68px repeat(${pros.length}, 1fr)`,
+        }}>
+          <div className="sticky top-0 z-10 bg-[#1a1408] border-b border-amber-800/40 p-2.5 text-[11px] font-bold text-amber-500/60 uppercase tracking-[0.15em] flex items-center justify-center">Hora</div>
+          {pros.map((p, i) => (
+            <div key={p.id} className={`sticky top-0 z-10 bg-[#1a1408] border-b border-amber-800/40 ${i > 0 ? 'border-l border-amber-800/20' : ''} p-2.5 flex items-center gap-2.5`}>
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold shadow-sm"
                 style={{ backgroundColor: p.cor, color: "#0e0a05" }}>{p.avatar}</span>
-              <div className="text-sm font-medium">{p.nome}</div>
+              <span className="text-sm font-bold tracking-wide">{p.nome}</span>
             </div>
           ))}
-          {slots.map((h) => (
-            <SlotRow key={h} h={h} pros={pros} cellMap={apptByCell}
+          {slots.map((h, idx) => (
+            <SlotRow key={h} h={h} idx={idx} pros={pros} cellMap={apptByCell}
               onEmpty={(prof_id) => setAgendar({ prof_id, hora: h })}
               onAppt={(a) => setOpenDetail(a)}
             />
@@ -193,10 +195,10 @@ function MobileAgenda({ pros, slots, apptByCell, selectedPro, onSelectPro, onEmp
           {pros.map((p) => (
             <button key={p.id}
               onClick={() => onSelectPro(p.id === currentPro ? null : p.id)}
-              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all ${
                 p.id === currentPro
-                  ? "text-black font-semibold"
-                  : "bg-secondary/50 text-muted-foreground"
+                  ? "text-black font-bold shadow-md scale-105"
+                  : "bg-black/20 text-muted-foreground/70 border border-border/40"
               }`}
               style={p.id === currentPro ? { backgroundColor: p.cor } : undefined}
             >
@@ -209,27 +211,34 @@ function MobileAgenda({ pros, slots, apptByCell, selectedPro, onSelectPro, onEmp
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
 
-      <div className="divide-y divide-border">
+      <div className="divide-y divide-border/50">
         {slots.map((h) => {
           const appt = currentPro ? apptByCell.get(`${currentPro}|${h}`) : null;
+          const pro = pros.find(p => p.id === currentPro);
           return (
             <button key={h}
               onClick={() => appt ? onAppt(appt) : currentPro && onEmpty(currentPro, h)}
-              className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${
-                appt ? "hover:brightness-110" : "hover:bg-secondary/40"
+              className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all ${
+                appt
+                  ? "hover:brightness-110"
+                  : "hover:bg-amber-500/5"
               }`}
-              style={appt && currentPro ? {
-                borderLeft: `4px solid ${pros.find(p => p.id === currentPro)?.cor ?? '#d4a853'}`,
+              style={appt ? {
+                background: `linear-gradient(135deg, ${pro?.cor}15 0%, transparent 100%)`,
+                borderLeft: `4px solid ${pro?.cor ?? '#d4a853'}`,
               } : undefined}
             >
-              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{h}</span>
+              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0 font-bold">{h}</span>
               {appt ? (
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-semibold truncate">{appt.cliente}</div>
-                  <div className="text-xs text-muted-foreground truncate">{appt.servico}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold truncate">{appt.cliente}</span>
+                    <StatusBadge status={appt.status} />
+                  </div>
+                  <div className="text-xs text-muted-foreground/80 truncate">{appt.servico} · R$ {appt.valor.toFixed(2)}</div>
                 </div>
               ) : (
-                <span className="text-xs text-muted-foreground/40">Livre</span>
+                <span className="text-xs text-amber-500/40 font-medium opacity-0 group-hover:opacity-100">Toque para agendar</span>
               )}
             </button>
           );
@@ -239,33 +248,59 @@ function MobileAgenda({ pros, slots, apptByCell, selectedPro, onSelectPro, onEmp
   );
 }
 
-function SlotRow({ h, pros, cellMap, onEmpty, onAppt }: {
-  h: string; pros: Pro[];
+function SlotRow({ h, idx, pros, cellMap, onEmpty, onAppt }: {
+  h: string; idx: number; pros: Pro[];
   cellMap: Map<string, Appt>;
   onEmpty: (prof_id: number) => void;
   onAppt: (a: Appt) => void;
 }) {
+  const isEven = idx % 2 === 0;
   return (
     <>
-      <div className="border-b border-border p-2 text-xs text-muted-foreground font-mono">{h}</div>
-      {pros.map((p) => {
+      <div className={`border-b border-border/60 p-2 text-xs text-muted-foreground font-mono flex items-center justify-center ${isEven ? 'bg-background/30' : 'bg-black/10'}`}>{h}</div>
+      {pros.map((p, pi) => {
         const a = cellMap.get(`${p.id}|${h}`);
+        const isFirst = pi === 0;
         return (
           <button key={p.id}
             onClick={() => (a ? onAppt(a) : onEmpty(p.id))}
-            className={`border-b border-l border-border p-2 text-left transition-colors min-h-[56px] ${
-              a ? "hover:brightness-110" : "hover:bg-secondary/40"
+            className={`border-b border-border/60 ${isFirst ? '' : 'border-l border-border/30'} p-1.5 text-left transition-all duration-150 min-h-[58px] group ${
+              isEven ? 'bg-background/30' : 'bg-black/10'
+            } ${a
+              ? 'hover:brightness-110 cursor-pointer'
+              : 'hover:bg-black/20 cursor-pointer'
             }`}
-            style={a ? { backgroundColor: `${p.cor}22`, borderLeft: `3px solid ${p.cor}` } : undefined}
+            style={a ? {
+              background: `linear-gradient(135deg, ${p.cor}18 0%, ${p.cor}08 100%)`,
+              borderLeft: isFirst ? undefined : `3px solid ${p.cor}55`,
+            } : undefined}
           >
             {a ? (
-              <div className="space-y-1">
-                <div className="text-xs font-semibold truncate">{a.cliente}</div>
-                <div className="text-[11px] text-muted-foreground truncate">{a.servico}</div>
-                <StatusBadge status={a.status} />
+              <div className="space-y-0.5 px-1">
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-bold truncate leading-tight">{a.cliente}</span>
+                  {a.status !== 'agendado' && (
+                    <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                      a.status === 'confirmado' ? 'bg-emerald-500/20 text-emerald-400' :
+                      a.status === 'cancelado' ? 'bg-red-500/20 text-red-400' :
+                      a.status === 'concluido' ? 'bg-blue-500/20 text-blue-400' :
+                      'bg-amber-500/20 text-amber-400'
+                    }`}>
+                      {a.status === 'confirmado' ? 'Conf' : a.status === 'cancelado' ? 'X' : a.status === 'concluido' ? 'OK' : a.status.slice(0, 3)}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-muted-foreground/80 truncate leading-tight font-medium">{a.servico}</div>
+                <div className="flex items-center gap-1 text-[9px] text-muted-foreground/50">
+                  <span>{a.hora.slice(0, 5)}</span>
+                  <span>·</span>
+                  <span>R$ {a.valor.toFixed(2)}</span>
+                </div>
               </div>
             ) : (
-              <span className="text-[11px] text-muted-foreground/40">+ Livre</span>
+              <div className="flex flex-col items-center justify-center h-full w-full px-1 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                <span className="text-[10px] font-bold text-amber-500/60 uppercase tracking-wider">+ Agendar</span>
+              </div>
             )}
           </button>
         );
