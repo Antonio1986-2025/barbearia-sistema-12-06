@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { criarUsuario, excluirUsuario } from "@/lib/api/users.functions";
 import { formatBRL } from "@/lib/format";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Plus, Trash2, Copy, TrendingUp, Users, CalendarCheck } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,16 +29,19 @@ function ConfigPage() {
         <p className="text-sm text-muted-foreground">Profissionais, serviços e horários da barbearia</p>
       </div>
       <Tabs defaultValue="geral">
-        <TabsList>
-          <TabsTrigger value="geral">Geral</TabsTrigger>
-          <TabsTrigger value="prof">Profissionais</TabsTrigger>
-          <TabsTrigger value="svc">Serviços</TabsTrigger>
-          <TabsTrigger value="users">Usuários</TabsTrigger>
-          <TabsTrigger value="link">Link público</TabsTrigger>
-          <TabsTrigger value="whatsapp">WhatsApp IA</TabsTrigger>
-          <TabsTrigger value="brain">Cérebro IA</TabsTrigger>
-          <TabsTrigger value="reports">Relatórios IA</TabsTrigger>
-        </TabsList>
+        <ScrollArea className="w-full">
+          <TabsList className="w-max min-w-full">
+            <TabsTrigger value="geral">Geral</TabsTrigger>
+            <TabsTrigger value="prof">Profissionais</TabsTrigger>
+            <TabsTrigger value="svc">Serviços</TabsTrigger>
+            <TabsTrigger value="users">Usuários</TabsTrigger>
+            <TabsTrigger value="link">Link público</TabsTrigger>
+            <TabsTrigger value="whatsapp">WhatsApp IA</TabsTrigger>
+            <TabsTrigger value="brain">Cérebro IA</TabsTrigger>
+            <TabsTrigger value="reports">Relatórios IA</TabsTrigger>
+          </TabsList>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
         <TabsContent value="geral" className="mt-4"><GeralTab /></TabsContent>
         <TabsContent value="prof" className="mt-4"><ProfTab /></TabsContent>
         <TabsContent value="svc" className="mt-4"><SvcTab /></TabsContent>

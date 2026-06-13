@@ -13,6 +13,9 @@ COPY package*.json ./
 # Instalar dependências
 RUN npm install
 
+# CA certificates para Alpine (necessário para fetch em Alpine)
+RUN apk add --no-cache ca-certificates
+
 # Copiar código fonte
 COPY . .
 

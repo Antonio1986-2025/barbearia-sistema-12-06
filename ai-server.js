@@ -119,9 +119,10 @@ DADOS NECESSÁRIOS (em qualquer ordem):
 - Horário (mostre os disponíveis do contexto)
 
 QUANDO CONFIRMAR:
-- Quando tiver TODOS os dados e o cliente confirmar, responda APENAS: CONFIRMAR_AGENDAMENTO
-- Se faltar algum dado, peça naturalmente
-- Não force um pedido específico - adapte ao que o cliente falou
+- Quando tiver TODOS os 5 dados acima confirmados PELO CLIENTE E eles estiverem visíveis no CONTEXTO ATUAL, responda APENAS: CONFIRMAR_AGENDAMENTO
+- Se faltar algum dado na seção CONTEXTO ATUAL, pergunte naturalmente
+- NUNCA confirme se CONTEXTO ATUAL não mostrar todos os campos preenchidos
+- Se o cliente disser apenas "Sim" e CONTEXTO ATUAL estiver incompleto, peça o que falta
 
 REGRAS:
 - NÃO invente dados - use apenas o que está no contexto
@@ -455,12 +456,14 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
   if (!conv.context.nome && userMessage.length > 3) {
     const nomeMatch = userMessage.match(/(?:meu nome é|me chamo|sou o? a?|meu nome|nome é|me dá|pode me chamar)\s+(.+)/i);
     if (nomeMatch) {
-      let nome = nomeMatch[1].trim().replace(/[.!?,;]+$/, '');
+      let nome = nomeMatch[1].trim().replace(/[.!?,;]+$/g, '');
       // Cortar em palavras que marcam fim do nome
       const fimNome = nome.search(/\s+(e|pra|para|é|vou|quero|preciso|gostaria|agendar|marcar|hoje|amanhã|às|as|horas?|do|da|de|como|com|se|seu|sua|meu|minha|tem|ter|ser|no|na|em|um|uma)\s+/i);
       if (fimNome > 0) {
         nome = nome.substring(0, fimNome);
       }
+      // Remove qualquer pontuação residual do final
+      nome = nome.replace(/[.,!?;]+$/g, '').trim();
       if (nome.length > 2 && nome.length < 50 && /\s/.test(nome)) {
         conv.context.nome = nome;
         console.log(`🔍 Nome extraído: ${conv.context.nome}`);
@@ -512,33 +515,10 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
         const month = dateMatch[2].padStart(2, '0');
         const year = dateMatch[3] ? dateMatch[3].padStart(4, '20') : String(hoje.getFullYear());
         conv.context.data = `${year}-${month}-${day}`;
-      }
-    }
-  }
-
-  // Extrair hora (só se já tem profissional E serviço — senão "15" pode ser escolha de barbeiro/serviço)
-  if (!conv.context.hora && conv.context.prof_id && conv.context.servico_id) {
-    // "18:00", "18h00"
-    const timeMatch = userMessage.match(/(\d{1,2})[h:](\d{2})/);
-    if (timeMatch) {
-      conv.context.hora = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-    } else {
-      // "19h", "9h" — hora sem minutos
-      const horaSimples = userMessage.match(/\b(\d{1,2})h\b/i);
-      if (horaSimples) {
-        const h = parseInt(horaSimples[1]);
-        if (h >= 8 && h <= 20) {
-          conv.context.hora = `${String(h).padStart(2, '0')}:00`;
-        }
       } else {
-        // "às 15", "as 15", "15 horas" — hora sem minutos
-        const hourOnly = userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i);
-        if (hourOnly) {
-          const h = parseInt(hourOnly[1]);
-          if (h >= 8 && h <= 20) {
-            conv.context.hora = `${String(h).padStart(2, '0')}:00`;
-          }
-        }
+        // Nenhuma menção de data → assume HOJE como padrão
+        conv.context.data = hojeStr;
+        console.log(`📅 Data não mencionada, assumindo hoje: ${hojeStr}`);
       }
     }
   }
@@ -556,29 +536,38 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     }
   }
 
-  // Extrair barbeiro por número (se ainda não tem profissional)
-  if (!conv.context.prof_id) {
-    const numMatch = msgLower.match(/^(\d+)$/);
-    if (numMatch && !conv.context.servico_id) {
-      const idx = parseInt(numMatch[1]) - 1;
-      if (idx >= 0 && idx < professionals.length) {
-        conv.context.prof_id = professionals[idx].id;
-        console.log(`🔍 Profissional #${numMatch[1]} → ${professionals[idx].nome} (id: ${professionals[idx].id})`);
-      } else {
-        console.log(`⚠️ Profissional #${numMatch[1]} não existe. Total: ${professionals.length}`);
-      }
-    }
-  }
-
   // Extrair serviço por nome (case-insensitive, parcial, sem acentos)
   if (!conv.context.servico_id) {
     const msgNoAccent = msgLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    for (const s of services) {
-      const nomeNoAccent = s.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-      if (msgNoAccent.includes(nomeNoAccent) || nomeNoAccent.includes(msgNoAccent)) {
-        conv.context.servico_id = s.id;
-        console.log(`🔍 Serviço por nome: "${msgLower}" → ${s.nome} (id: ${s.id})`);
-        break;
+    // Coleta todos os matches, depois escolhe o melhor (mais específico)
+    const svcNoAccent = s => s.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isSimple = s => !s.nome.includes('/') && !s.nome.toLowerCase().includes('domicilio');
+
+    let matches = services.filter(s => {
+      const n = svcNoAccent(s);
+      return msgNoAccent.includes(n) || n.includes(msgNoAccent);
+    });
+    if (matches.length > 0) {
+      // Preferir serviço simples (sem /) sobre combo
+      matches.sort((a, b) => (isSimple(a) ? 0 : 1) - (isSimple(b) ? 0 : 1) || a.nome.length - b.nome.length);
+      conv.context.servico_id = matches[0].id;
+      console.log(`🔍 Serviço por nome: "${msgLower}" → ${matches[0].nome} (id: ${matches[0].id})`);
+    }
+    // Match por palavra-chave (se ainda não encontrou)
+    if (!conv.context.servico_id) {
+      const palavrasMsg = msgNoAccent.split(/\s+/);
+      let wordMatches = services.filter(s => {
+        const palavrasSvc = svcNoAccent(s).split(/\s+/);
+        return palavrasSvc.some(pSvc =>
+          pSvc.length > 2 && palavrasMsg.some(pMsg =>
+            pMsg.includes(pSvc) || pSvc.includes(pMsg)
+          )
+        );
+      });
+      if (wordMatches.length > 0) {
+        wordMatches.sort((a, b) => (isSimple(a) ? 0 : 1) - (isSimple(b) ? 0 : 1) || a.nome.length - b.nome.length);
+        conv.context.servico_id = wordMatches[0].id;
+        console.log(`🔍 Serviço por palavra-chave: "${msgLower}" → ${wordMatches[0].nome} (id: ${wordMatches[0].id})`);
       }
     }
   }
@@ -597,6 +586,70 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     }
   }
 
+  // Inferir serviço do contexto (com match parcial — prefere serviços simples)
+  if (!conv.context.servico_id && conv.context.prof_id) {
+    const msgNoAccent = msgLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const svcNoAccent = s => s.nome.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const isSimple = s => !s.nome.includes('/') && !s.nome.toLowerCase().includes('domicilio');
+
+    const findBest = (stem) => {
+      const all = services.filter(s => svcNoAccent(s).includes(stem));
+      if (all.length === 0) return null;
+      all.sort((a, b) => (isSimple(a) ? 0 : 1) - (isSimple(b) ? 0 : 1) || a.nome.length - b.nome.length);
+      return all[0];
+    };
+
+    let inferido = null;
+    if (msgNoAccent.includes('cort')) inferido = findBest('cort');
+    else if (msgNoAccent.includes('barb')) inferido = findBest('barb');
+    else if (msgNoAccent.includes('sobrancelh')) inferido = findBest('sobrancelh');
+
+    if (inferido) {
+      conv.context.servico_id = inferido.id;
+      console.log(`🔍 Serviço inferido: "${msgLower}" → ${inferido.nome} (id: ${inferido.id})`);
+    }
+  }
+
+  // Extrair hora (só precisa de prof_id — "19h", "17:00" são inequívocos)
+  console.log(`🔴 [DEBUG HORA] Mensagem: "${userMessage}"`);
+  console.log(`🔴 [DEBUG HORA] prof_id existe? ${!!conv.context.prof_id} (valor: ${conv.context.prof_id})`);
+  console.log(`🔴 [DEBUG HORA] hourOnly match:`, userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i));
+  console.log(`🔴 [DEBUG HORA] timeMatch match:`, userMessage.match(/(\d{1,2})[h:](\d{2})/));
+  console.log(`🔴 [DEBUG HORA] horaSimples match:`, userMessage.match(/\b(\d{1,2})h\b/i));
+
+  if (!conv.context.hora && conv.context.prof_id) {
+    console.log(`🔴 [DEBUG HORA] Entrou no bloco de extração`);
+    const timeMatch = userMessage.match(/(\d{1,2})[h:](\d{2})/);
+    if (timeMatch) {
+      conv.context.hora = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+      console.log(`🔴 [DEBUG HORA] ✅ timeMatch: ${conv.context.hora}`);
+    } else {
+      const horaSimples = userMessage.match(/\b(\d{1,2})h\b/i);
+      if (horaSimples) {
+        const h = parseInt(horaSimples[1]);
+        console.log(`🔴 [DEBUG HORA] horaSimples h=${h}, range ok? ${h >= 8 && h <= 20}`);
+        if (h >= 8 && h <= 20) {
+          conv.context.hora = `${String(h).padStart(2, '0')}:00`;
+          console.log(`🔴 [DEBUG HORA] ✅ horaSimples: ${conv.context.hora}`);
+        }
+      } else {
+        const hourOnly = userMessage.match(/(?:às|as|horas?)\s+(\d{1,2})/i);
+        console.log(`🔴 [DEBUG HORA] hourOnly result:`, hourOnly);
+        if (hourOnly) {
+          const h = parseInt(hourOnly[1]);
+          console.log(`🔴 [DEBUG HORA] hourOnly h=${h}, range ok? ${h >= 8 && h <= 20}`);
+          if (h >= 8 && h <= 20) {
+            conv.context.hora = `${String(h).padStart(2, '0')}:00`;
+            console.log(`🔴 [DEBUG HORA] ✅ hourOnly: ${conv.context.hora}`);
+          }
+        }
+      }
+    }
+  } else {
+    console.log(`🔴 [DEBUG HORA] ❌ NÃO entrou no bloco. hora=${conv.context.hora}, prof_id=${conv.context.prof_id}`);
+  }
+  console.log(`🔴 [DEBUG HORA] Final: ${conv.context.hora}`);
+
   // Verificar se deve confirmar
   if (resposta.includes('CONFIRMAR_AGENDAMENTO')) {
     console.log(`🔍 Contexto antes de criar agendamento:`, JSON.stringify(conv.context, null, 2));
@@ -609,10 +662,82 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     if (!conv.context.hora) missing.push('horário');
 
     if (missing.length > 0) {
-      const msg = `Faltam informações para confirmar: ${missing.join(', ')}. Pode me informar?`;
-      console.log(`⚠️ Dados faltantes: ${missing.join(', ')}`);
-      await sendWhatsApp(phone, msg);
-      return;
+      console.log(`⚠️ Dados faltantes: ${missing.join(', ')} — tentando extrair via IA...`);
+
+      const historioTexto = conv.history
+        .filter(h => h.role === 'user')
+        .map(h => typeof h.content === 'string' ? h.content : '[imagem]')
+        .join(' | ');
+
+      const servicosTexto = services
+        .map(s => `${s.nome} (R$${s.preco.toFixed(2)}) [ID: ${s.id}]`)
+        .join(', ');
+
+      const profissionaisTexto = professionals
+        .map(p => `${p.nome} [ID: ${p.id}]`)
+        .join(', ');
+
+      const extractionPrompt = `Extraia dados de agendamento da conversa abaixo.
+
+CONVERSA DO CLIENTE:
+${historicoTexto}
+
+DADOS JÁ EXTRAÍDOS (podem estar incompletos):
+- Nome: ${conv.context.nome || '?'}
+- Barbeiro ID: ${conv.context.prof_id || '?'} (opções: ${profissionaisTexto})
+- Serviço ID: ${conv.context.servico_id || '?'} (opções: ${servicosTexto})
+- Data: ${conv.context.data || '?'}
+- Horário: ${conv.context.hora || '?'}
+
+CAMPOS FALTANDO: ${missing.join(', ')}
+
+INSTRUÇÕES:
+- Analise a conversa e preencha APENAS os campos faltantes
+- Use IDs dos profissionais/serviços fornecidos
+- Data no formato YYYY-MM-DD. Se o cliente NÃO mencionou data, use HOJE: ${new Date().toISOString().split('T')[0]}
+- Horário no formato HH:MM (24h)
+- Se um campo não puder ser determinado, deixe como null
+
+Responda APENAS com JSON válido, sem formatação extra:
+{"nome": ..., "prof_id": ..., "servico_id": ..., "data": ..., "hora": ...}`;
+
+      try {
+        const extraction = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'Você é um extrator de dados. Responda APENAS com JSON válido.' },
+            { role: 'user', content: extractionPrompt }
+          ],
+          temperature: 0,
+          max_tokens: 200
+        });
+
+        const raw = extraction.choices[0].message.content.replace(/```json|```/g, '').trim();
+        const extraido = JSON.parse(raw);
+
+        if (extraido.nome && !conv.context.nome) conv.context.nome = extraido.nome;
+        if (extraido.prof_id && !conv.context.prof_id) conv.context.prof_id = extraido.prof_id;
+        if (extraido.servico_id && !conv.context.servico_id) conv.context.servico_id = extraido.servico_id;
+        if (extraido.data && !conv.context.data) conv.context.data = extraido.data;
+        if (extraido.hora && !conv.context.hora) conv.context.hora = extraido.hora;
+
+        console.log(`🔍 Extração IA:`, JSON.stringify(extraido));
+      } catch (err) {
+        console.error(`⚠️ Falha na extração via IA:`, err.message);
+      }
+
+      const missing2 = [];
+      if (!conv.context.prof_id) missing2.push('barbeiro');
+      if (!conv.context.servico_id) missing2.push('serviço');
+      if (!conv.context.data) missing2.push('data');
+      if (!conv.context.hora) missing2.push('horário');
+
+      if (missing2.length > 0) {
+        const msg = `Faltam informações para confirmar: ${missing2.join(', ')}. Pode me informar?`;
+        console.log(`⚠️ Dados ainda faltantes: ${missing2.join(', ')}`);
+        await sendWhatsApp(phone, msg);
+        return;
+      }
     }
 
     try {
@@ -643,12 +768,10 @@ Até lá! ✂️`;
       
       console.log(`🎉 Agendamento ${appt.id} criado para ${phone}`);
       
-      // Limpar conversa após 5 segundos
-      setTimeout(() => {
-        conversations.delete(phone);
-        console.log(`🧹 Conversa de ${phone} limpa`);
-      }, 5000);
-
+      // Limpar conversa APÓS confirmar
+      conversations.delete(phone);
+      console.log(`🧹 Conversa de ${phone} limpa após agendamento`);
+      
       return;
     } catch (error) {
       console.error('Erro ao criar agendamento:', error);

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatBRL, formatDateBR, maskPhone } from "@/lib/format";
-import { Plus, Search, Trash2 } from "lucide-react";
+import { Plus, Search, Trash2, Phone, Mail, DollarSign } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/clientes")({
@@ -65,36 +65,58 @@ function ClientesPage() {
       </div>
 
       <div className="bs-card overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Telefone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead className="text-right">Visitas</TableHead>
-              <TableHead className="text-right">Total Gasto</TableHead>
-              <TableHead>Última visita</TableHead>
-              <TableHead className="w-12"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Carregando...</TableCell></TableRow>}
-            {!isLoading && clients.length === 0 && (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum cliente encontrado</TableCell></TableRow>
-            )}
-            {clients.map((c) => (
-              <TableRow key={c.id}>
-                <TableCell className="font-medium">{c.nome}</TableCell>
-                <TableCell className="font-mono text-sm">{c.tel}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{c.email ?? "—"}</TableCell>
-                <TableCell className="text-right">{c.visitas}</TableCell>
-                <TableCell className="text-right font-mono">{formatBRL(c.total_gasto)}</TableCell>
-                <TableCell className="text-sm">{c.ultima_visita ? formatDateBR(c.ultima_visita) : "—"}</TableCell>
-                <TableCell><Button size="icon" variant="ghost" onClick={() => remove(c.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead className="text-right">Visitas</TableHead>
+                <TableHead className="text-right">Total Gasto</TableHead>
+                <TableHead>Última visita</TableHead>
+                <TableHead className="w-12"></TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {isLoading && <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Carregando...</TableCell></TableRow>}
+              {!isLoading && clients.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground">Nenhum cliente encontrado</TableCell></TableRow>
+              )}
+              {clients.map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="font-medium">{c.nome}</TableCell>
+                  <TableCell className="font-mono text-sm">{c.tel}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{c.email ?? "—"}</TableCell>
+                  <TableCell className="text-right">{c.visitas}</TableCell>
+                  <TableCell className="text-right font-mono">{formatBRL(c.total_gasto)}</TableCell>
+                  <TableCell className="text-sm">{c.ultima_visita ? formatDateBR(c.ultima_visita) : "—"}</TableCell>
+                  <TableCell><Button size="icon" variant="ghost" onClick={() => remove(c.id)}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="block md:hidden divide-y divide-border">
+          {isLoading && <p className="text-center text-muted-foreground py-8">Carregando...</p>}
+          {!isLoading && clients.length === 0 && (
+            <p className="text-center text-muted-foreground py-8">Nenhum cliente encontrado</p>
+          )}
+          {clients.map((c) => (
+            <div key={c.id} className="flex items-start gap-3 px-4 py-4">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm">{c.nome}</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                  {c.tel && <span className="flex items-center gap-1"><Phone className="h-3 w-3" />{c.tel}</span>}
+                  {c.email && <span className="flex items-center gap-1"><Mail className="h-3 w-3" />{c.email}</span>}
+                  <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />{formatBRL(c.total_gasto)} · {c.visitas} visitas</span>
+                </div>
+              </div>
+              <Button size="icon" variant="ghost" className="shrink-0 h-9 w-9" onClick={() => remove(c.id)}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {openNew && <NewClientDialog onClose={() => setOpenNew(false)} onSaved={() => { setOpenNew(false); qc.invalidateQueries({ queryKey: ["clients"] }); }} />}

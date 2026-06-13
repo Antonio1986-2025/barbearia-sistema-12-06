@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { StatusBadge } from "@/components/StatusBadge";
 import { NovoAgendamentoDialog } from "@/components/NovoAgendamentoDialog";
 import { formatBRL, generateSlots, todayYMD } from "@/lib/format";
-import { ChevronLeft, ChevronRight, Plus, Trash2, Printer } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Trash2, Printer, Loader2 } from "lucide-react";
 
 import { toast } from "sonner";
 
@@ -31,8 +32,9 @@ function AgendaPage() {
   const [data, setData] = useState(todayYMD());
   const [agendar, setAgendar] = useState<{ prof_id?: number; hora?: string } | null>(null);
   const [openDetail, setOpenDetail] = useState<Appt | null>(null);
+  const [selectedPro, setSelectedPro] = useState<number | null>(null);
 
-  const { data: pros = [] } = useQuery({
+  const { data: pros = [], isLoading: loadingPros } = useQuery({
     queryKey: ["professionals"],
     queryFn: async () => {
       const { data, error } = await supabase.from("professionals").select("*").eq("ativo", true).order("ordem");
@@ -50,7 +52,7 @@ function AgendaPage() {
     },
   });
 
-  const { data: settings } = useQuery({
+  const { data: settings, isLoading: loadingSettings } = useQuery({
     queryKey: ["settings"],
     queryFn: async () => {
       const { data, error } = await supabase.from("settings").select("*").maybeSingle();
@@ -59,7 +61,7 @@ function AgendaPage() {
     },
   });
 
-  const { data: appts = [] } = useQuery({
+  const { data: appts = [], isLoading: loadingAppts } = useQuery({
     queryKey: ["appts", data],
     queryFn: async () => {
       const { data: rows, error } = await supabase.from("appointments").select("*").eq("data", data);
@@ -87,6 +89,8 @@ function AgendaPage() {
 
   const refresh = () => qc.invalidateQueries({ queryKey: ["appts"] });
 
+  const isLoading = loadingPros || loadingSettings || loadingAppts;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 justify-between">
@@ -108,7 +112,7 @@ function AgendaPage() {
       </div>
 
       <div className="bs-card overflow-auto">
-        <div className="min-w-[720px] grid" style={{ gridTemplateColumns: `80px repeat(${pros.length}, 1fr)` }}>
+        <div className="hidden md:block min-w-[720px] grid" style={{ gridTemplateColumns: `80px repeat(${pros.length}, 1fr)` }}>
           <div className="sticky top-0 z-10 bg-card border-b border-border p-3 text-xs font-semibold text-muted-foreground uppercase">Hora</div>
           {pros.map((p) => (
             <div key={p.id} className="sticky top-0 z-10 bg-card border-b border-l border-border p-3 flex items-center gap-2">
@@ -123,6 +127,24 @@ function AgendaPage() {
               onAppt={(a) => setOpenDetail(a)}
             />
           ))}
+        </div>
+
+        <div className="block md:hidden">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-20">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <MobileAgenda
+              pros={pros}
+              slots={slots}
+              apptByCell={apptByCell}
+              selectedPro={selectedPro}
+              onSelectPro={setSelectedPro}
+              onEmpty={(prof_id, hora) => setAgendar({ prof_id, hora })}
+              onAppt={setOpenDetail}
+            />
+          )}
         </div>
       </div>
 
@@ -152,6 +174,67 @@ function AgendaPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function MobileAgenda({ pros, slots, apptByCell, selectedPro, onSelectPro, onEmpty, onAppt }: {
+  pros: Pro[]; slots: string[]; apptByCell: Map<string, Appt>;
+  selectedPro: number | null; onSelectPro: (id: number | null) => void;
+  onEmpty: (prof_id: number, hora: string) => void;
+  onAppt: (a: Appt) => void;
+}) {
+  const currentPro = selectedPro ?? pros[0]?.id ?? null;
+
+  return (
+    <div>
+      <ScrollArea className="w-full pb-2">
+        <div className="flex gap-1.5 px-1 pt-2 pb-1">
+          {pros.map((p) => (
+            <button key={p.id}
+              onClick={() => onSelectPro(p.id === currentPro ? null : p.id)}
+              className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors ${
+                p.id === currentPro
+                  ? "text-black font-semibold"
+                  : "bg-secondary/50 text-muted-foreground"
+              }`}
+              style={p.id === currentPro ? { backgroundColor: p.cor } : undefined}
+            >
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                style={{ backgroundColor: p.cor, color: "#0e0a05" }}>{p.avatar}</span>
+              {p.nome}
+            </button>
+          ))}
+        </div>
+        <ScrollBar orientation="horizontal" />
+      </ScrollArea>
+
+      <div className="divide-y divide-border">
+        {slots.map((h) => {
+          const appt = currentPro ? apptByCell.get(`${currentPro}|${h}`) : null;
+          return (
+            <button key={h}
+              onClick={() => appt ? onAppt(appt) : currentPro && onEmpty(currentPro, h)}
+              className={`w-full flex items-center gap-3 px-3 py-3 text-left transition-colors ${
+                appt ? "hover:brightness-110" : "hover:bg-secondary/40"
+              }`}
+              style={appt && currentPro ? {
+                borderLeft: `4px solid ${pros.find(p => p.id === currentPro)?.cor ?? '#d4a853'}`,
+              } : undefined}
+            >
+              <span className="text-xs font-mono text-muted-foreground w-12 shrink-0">{h}</span>
+              {appt ? (
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold truncate">{appt.cliente}</div>
+                  <div className="text-xs text-muted-foreground truncate">{appt.servico}</div>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground/40">Livre</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

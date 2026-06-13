@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import {
-  Outlet, Link, createRootRouteWithContext, useRouter,
+import { Outlet, Link, createRootRouteWithContext, useRouter,
   HeadContent, Scripts, useLocation, useNavigate,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
@@ -51,10 +50,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "Barbearia Status — Gestão" },
       { name: "description", content: "Sistema de gestão da Barbearia Status: agenda, clientes, caixa, comandas, estoque e relatórios." },
       { name: "theme-color", content: "#0e0a05" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "apple-mobile-web-app-title", content: "Barbearia" },
+      { name: "mobile-web-app-capable", content: "yes" },
       { property: "og:title", content: "Barbearia Status — Gestão" },
       { name: "twitter:title", content: "Barbearia Status — Gestão" },
       { property: "og:description", content: "Sistema de gestão da Barbearia Status: agenda, clientes, caixa, comandas, estoque e relatórios." },
@@ -62,7 +65,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:type", content: "website" },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "manifest", href: "/manifest.json" },
+      { rel: "icon", type: "image/svg+xml", href: "/icon.svg" },
+      { rel: "apple-touch-icon", href: "/icon.svg" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -77,6 +85,11 @@ function RootShell({ children }: { children: React.ReactNode }) {
       <body>
         {children}
         <Scripts />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if("serviceWorker" in navigator){window.addEventListener("load",()=>{navigator.serviceWorker.register("/sw.js")})}`,
+          }}
+        />
       </body>
     </html>
   );

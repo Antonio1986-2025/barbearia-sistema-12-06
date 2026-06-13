@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatBRL } from "@/lib/format";
-import { Plus, AlertTriangle, ArrowUpCircle, ArrowDownCircle, Trash2 } from "lucide-react";
+import { Plus, AlertTriangle, ArrowUpCircle, ArrowDownCircle, Trash2, Package } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/estoque")({
@@ -53,42 +53,73 @@ function EstoquePage() {
       </div>
 
       <div className="bs-card overflow-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Item</TableHead>
-              <TableHead className="text-right">Quantidade</TableHead>
-              <TableHead className="text-right">Mínimo</TableHead>
-              <TableHead className="text-right">Custo</TableHead>
-              <TableHead className="text-right">Venda</TableHead>
-              <TableHead className="w-40 text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum item cadastrado</TableCell></TableRow>}
-            {items.map((i) => {
-              const low = Number(i.quantidade) <= Number(i.minimo);
-              return (
-                <TableRow key={i.id}>
-                  <TableCell className="font-medium flex items-center gap-2">
-                    {low && <AlertTriangle className="h-4 w-4 text-destructive" />}
-                    {i.nome}
-                  </TableCell>
-                  <TableCell className={`text-right font-mono ${low ? "text-destructive font-bold" : ""}`}>
-                    {Number(i.quantidade)} {i.unidade}
-                  </TableCell>
-                  <TableCell className="text-right text-muted-foreground font-mono">{Number(i.minimo)}</TableCell>
-                  <TableCell className="text-right font-mono">{formatBRL(i.custo)}</TableCell>
-                  <TableCell className="text-right font-mono">{formatBRL(i.preco_venda)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="outline" onClick={() => setOpenMov(i)}>Movimentar</Button>
-                    <Button size="icon" variant="ghost" onClick={() => remove(i.id)}><Trash2 className="h-4 w-4" /></Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+        <div className="hidden md:block">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Item</TableHead>
+                <TableHead className="text-right">Quantidade</TableHead>
+                <TableHead className="text-right">Mínimo</TableHead>
+                <TableHead className="text-right">Custo</TableHead>
+                <TableHead className="text-right">Venda</TableHead>
+                <TableHead className="w-40 text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items.length === 0 && <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground">Nenhum item cadastrado</TableCell></TableRow>}
+              {items.map((i) => {
+                const low = Number(i.quantidade) <= Number(i.minimo);
+                return (
+                  <TableRow key={i.id}>
+                    <TableCell className="font-medium flex items-center gap-2">
+                      {low && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                      {i.nome}
+                    </TableCell>
+                    <TableCell className={`text-right font-mono ${low ? "text-destructive font-bold" : ""}`}>
+                      {Number(i.quantidade)} {i.unidade}
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground font-mono">{Number(i.minimo)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatBRL(i.custo)}</TableCell>
+                    <TableCell className="text-right font-mono">{formatBRL(i.preco_venda)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="outline" onClick={() => setOpenMov(i)}>Movimentar</Button>
+                      <Button size="icon" variant="ghost" onClick={() => remove(i.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="block md:hidden divide-y divide-border">
+          {items.length === 0 && <p className="text-center text-muted-foreground py-8">Nenhum item cadastrado</p>}
+          {items.map((i) => {
+            const low = Number(i.quantidade) <= Number(i.minimo);
+            return (
+              <div key={i.id} className="flex items-start gap-3 px-4 py-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {low && <AlertTriangle className="h-4 w-4 text-destructive shrink-0" />}
+                    <span className="font-semibold text-sm">{i.nome}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-muted-foreground">
+                    <span className={low ? "text-destructive font-bold" : ""}>
+                      <Package className="h-3 w-3 inline mr-0.5" />{Number(i.quantidade)} {i.unidade}
+                    </span>
+                    <span>Mín: {Number(i.minimo)}</span>
+                    <span>Custo: {formatBRL(i.custo)}</span>
+                    <span>Venda: {formatBRL(i.preco_venda)}</span>
+                  </div>
+                </div>
+                <div className="flex gap-1 shrink-0">
+                  <Button size="sm" variant="outline" className="h-9 text-xs" onClick={() => setOpenMov(i)}>Mov</Button>
+                  <Button size="icon" variant="ghost" className="h-9 w-9" onClick={() => remove(i.id)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {openNew && <NewItemDialog onClose={() => setOpenNew(false)} onSaved={() => { setOpenNew(false); qc.invalidateQueries({ queryKey: ["stock-items"] }); }} />}
