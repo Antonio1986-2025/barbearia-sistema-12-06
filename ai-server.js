@@ -780,13 +780,16 @@ Responda APENAS com JSON válido, sem formatação extra:
         const raw = extraction.choices[0].message.content.replace(/```json|```/g, '').trim();
         const extraido = JSON.parse(raw);
 
-        if (extraido.nome && !conv.context.nome) conv.context.nome = extraido.nome;
-        if (extraido.prof_id && !conv.context.prof_id) conv.context.prof_id = extraido.prof_id;
-        if (extraido.servico_id && !conv.context.servico_id) conv.context.servico_id = extraido.servico_id;
-        if (extraido.data && !conv.context.data) conv.context.data = extraido.data;
-        if (extraido.hora && !conv.context.hora) conv.context.hora = extraido.hora;
+        // CORRIGIDO: Permite que a IA re-confirme ou atualize dados já extraídos
+        // CORRIGIDO: Permite que a IA re-confirme ou atualize dados já extraídos
+        if (extraido.nome) conv.context.nome = extraido.nome;
+        if (extraido.prof_id) conv.context.prof_id = extraido.prof_id;
+        if (extraido.servico_id) conv.context.servico_id = extraido.servico_id;
+        if (extraido.data) conv.context.data = extraido.data;
+        if (extraido.hora) conv.context.hora = extraido.hora;
 
         console.log(`🔍 Extração IA:`, JSON.stringify(extraido));
+        console.log(`📋 Contexto APÓS extração IA:`, JSON.stringify(conv.context, null, 2));
       } catch (err) {
         console.error(`⚠️ Falha na extração via IA:`, err.message);
       }
