@@ -149,6 +149,17 @@ Tudo certo?"`;
  * Envia mensagem via WhatsApp
  */
 async function sendWhatsApp(phone, message) {
+  // Parar indicador de digitação antes de enviar
+  try {
+    await axios.put(
+      `${EVOLUTION_URL}/chat/presence/${EVOLUTION_INSTANCE}`,
+      { number: phone, presence: 'available' },
+      {
+        headers: { 'apikey': EVOLUTION_API_KEY, 'Content-Type': 'application/json' },
+        timeout: 2000
+      }
+    );
+  } catch {}
   try {
     await axios.post(
       `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
@@ -167,6 +178,57 @@ async function sendWhatsApp(phone, message) {
   } catch (error) {
     console.error('❌ Erro ao enviar WhatsApp:', error.response?.data || error.message);
     throw error;
+  }
+}
+
+/**
+ * Envia indicador de digitação (mostra "..." no WhatsApp)
+ */
+async function sendTyping(phone) {
+  try {
+    await axios.put(
+      `${EVOLUTION_URL}/chat/presence/${EVOLUTION_INSTANCE}`,
+      {
+        number: phone,
+        presence: 'composing'
+      },
+      {
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        timeout: 3000
+      }
+    );
+  } catch (error) {
+    // Não crítico - apenas log silencioso
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('ℹ️ Typing indicator not supported by Evolution version');
+    }
+  }
+}
+
+/**
+ * Envia indicador de "parou de digitar" (opcional)
+ */
+async function sendStopTyping(phone) {
+  try {
+    await axios.put(
+      `${EVOLUTION_URL}/chat/presence/${EVOLUTION_INSTANCE}`,
+      {
+        number: phone,
+        presence: 'available'
+      },
+      {
+        headers: {
+          'apikey': EVOLUTION_API_KEY,
+          'Content-Type': 'application/json'
+        },
+        timeout: 3000
+      }
+    );
+  } catch {
+    // Não crítico
   }
 }
 
@@ -358,6 +420,9 @@ async function criarAgendamento(context) {
  * Processa mensagem
  */
 async function processarMensagem(phone, userMessage, imageBase64 = null, mimeType = null) {
+  // Mostrar "digitando..." no WhatsApp do cliente
+  sendTyping(phone);
+
   // Recuperar ou criar conversa
   let conv = conversations.get(phone);
   
