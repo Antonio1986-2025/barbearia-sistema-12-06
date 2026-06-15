@@ -58,6 +58,14 @@ const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const conversations = new Map();
 const processingPhones = new Set();
 
+// Handlers globais — capturam erros nao tratados (logs ASCII p/ Easypanel)
+process.on('unhandledRejection', (reason) => {
+  console.error('[UNHANDLED REJECTION]', reason instanceof Error ? reason.stack : reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[UNCAUGHT EXCEPTION]', err?.stack || err);
+});
+
 setInterval(() => {
   const now = Date.now();
   const ONE_HOUR = 60 * 60 * 1000;
@@ -515,7 +523,7 @@ async function processarMensagem(phone, userMessage) {
       max_tokens: 500
     });
   } catch (err) {
-    console.error('âŒ Erro OpenAI:', err.message);
+    console.error('[ERRO] OpenAI principal:', err?.message, err?.stack);
     await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? ðŸ˜…');
     return;
   }
@@ -606,7 +614,7 @@ async function processarMensagem(phone, userMessage) {
         await sendWhatsApp(phone, followUpMsg);
       }
     } catch (err) {
-      console.error('âŒ Erro no follow-up:', err.message);
+      console.error('[ERRO] follow-up OpenAI:', err?.message, err?.stack);
       await sendWhatsApp(phone, 'Posso ajudar com mais alguma informaÃ§Ã£o? ðŸ˜Š');
     }
   } else if (assistantMessage.content) {
@@ -753,10 +761,10 @@ app.post('/webhook', async (req, res) => {
     if (!userMessage) return res.json({ ok: true });
 
     console.log(`\nðŸ“± [${phone}]: ${userMessage}`);
-    processarMensagem(phone, userMessage).catch(err => console.error('âŒ Erro no processamento:', err));
+    processarMensagem(phone, userMessage).catch(err => console.error('[ERRO] processamento:', err?.message, err?.stack));
     res.json({ ok: true });
   } catch (error) {
-    console.error('âŒ Erro no webhook:', error);
+    console.error('[ERRO] webhook:', error?.message, error?.stack);
     res.status(500).json({ error: 'Internal error' });
   }
 });
