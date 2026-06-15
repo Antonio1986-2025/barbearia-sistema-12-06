@@ -11,17 +11,7 @@ export default defineConfig({
   plugins: [
     tsConfigPaths({ projects: ["./tsconfig.json"] }),
     // Redireciona a entrada do servidor SSR para src/server.ts (wrapper de erro).
-    // target: "cloudflare-pages" gera output compatível com Cloudflare Pages.
-    tanstackStart({
-      server: {
-        entry: "server",
-        // Detecta automaticamente o target baseado em variável de ambiente
-        // CF_PAGES=1 → cloudflare-pages | default → node-server
-        ...(process.env.CF_PAGES || process.env.CLOUDFLARE_PAGES
-          ? { preset: "cloudflare-pages" }
-          : {}),
-      },
-    }),
+    tanstackStart({ server: { entry: "server" } }),
     viteReact(),
     tailwindcss(),
   ],

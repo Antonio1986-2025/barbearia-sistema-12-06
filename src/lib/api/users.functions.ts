@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { getSupabaseAdmin } from "@/integrations/supabase/client.server";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 /**
  * Server functions de gerenciamento de usuários de acesso.
@@ -39,7 +39,6 @@ export const criarUsuario = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await assertAdmin(context as { supabase: any; userId: string });
-    const supabaseAdmin = await getSupabaseAdmin();
 
     // 1. Cria o usuário no Auth, já confirmado, com metadados nome/tipo.
     const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
@@ -74,7 +73,6 @@ export const excluirUsuario = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const ctx = context as { supabase: any; userId: string };
     await assertAdmin(ctx);
-    const supabaseAdmin = await getSupabaseAdmin();
 
     if (data.id === ctx.userId) {
       throw new Error("Você não pode excluir o seu próprio usuário.");
