@@ -81,6 +81,24 @@ function AgendaPage() {
     return m;
   }, [appts]);
 
+  const resumo = useMemo(() => {
+    const ativos = appts.filter((a) => a.status !== "cancelado");
+    const previsto = ativos.reduce((s, a) => s + Number(a.valor || 0), 0);
+    const concluido = appts
+      .filter((a) => a.status === "concluido")
+      .reduce((s, a) => s + Number(a.valor || 0), 0);
+    return {
+      total: ativos.length,
+      confirmados: appts.filter((a) => a.status === "confirmado").length,
+      concluidos: appts.filter((a) => a.status === "concluido").length,
+      previsto,
+      concluido,
+    };
+  }, [appts]);
+
+  const isToday = data === todayYMD();
+  const nowHHMM = new Date().toTimeString().slice(0, 5);
+
   const move = (days: number) => {
     const d = new Date(data + "T00:00:00");
     d.setDate(d.getDate() + days);
@@ -111,6 +129,26 @@ function AgendaPage() {
         </div>
       </div>
 
+      {/* Resumo do dia */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+        <div className="bs-card rounded-xl px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-bold">Agendamentos</div>
+          <div className="text-2xl font-display font-bold mt-0.5">{resumo.total}</div>
+        </div>
+        <div className="bs-card rounded-xl px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-bold">Confirmados</div>
+          <div className="text-2xl font-display font-bold mt-0.5 text-emerald-400">{resumo.confirmados}</div>
+        </div>
+        <div className="bs-card rounded-xl px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-bold">Previsto</div>
+          <div className="text-2xl font-display font-bold mt-0.5 bs-gold-text">{formatBRL(resumo.previsto)}</div>
+        </div>
+        <div className="bs-card rounded-xl px-4 py-3">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground/70 font-bold">Concluído</div>
+          <div className="text-2xl font-display font-bold mt-0.5 text-blue-400">{formatBRL(resumo.concluido)}</div>
+        </div>
+      </div>
+
       <div className="bs-card overflow-auto rounded-xl">
         <div className="hidden md:block min-w-[800px] grid" style={{
           gridTemplateColumns: `68px repeat(${pros.length}, 1fr)`,
@@ -125,6 +163,7 @@ function AgendaPage() {
           ))}
           {slots.map((h, idx) => (
             <SlotRow key={h} h={h} idx={idx} pros={pros} cellMap={apptByCell}
+              isNow={isToday && isSlotNow(h, nowHHMM, settings?.slot_minutos ?? 30)}
               onEmpty={(prof_id) => setAgendar({ prof_id, hora: h })}
               onAppt={(a) => setOpenDetail(a)}
             />
@@ -248,16 +287,20 @@ function MobileAgenda({ pros, slots, apptByCell, selectedPro, onSelectPro, onEmp
   );
 }
 
-function SlotRow({ h, idx, pros, cellMap, onEmpty, onAppt }: {
+function SlotRow({ h, idx, pros, cellMap, isNow, onEmpty, onAppt }: {
   h: string; idx: number; pros: Pro[];
   cellMap: Map<string, Appt>;
+  isNow?: boolean;
   onEmpty: (prof_id: number) => void;
   onAppt: (a: Appt) => void;
 }) {
   const isEven = idx % 2 === 0;
   return (
     <>
-      <div className={`border-b border-border/60 p-2 text-xs text-muted-foreground font-mono flex items-center justify-center ${isEven ? 'bg-background/30' : 'bg-black/10'}`}>{h}</div>
+      <div className={`relative border-b border-border/60 p-2 text-xs font-mono flex items-center justify-center ${isNow ? 'bg-amber-500/15 text-amber-300 font-bold' : isEven ? 'bg-background/30 text-muted-foreground' : 'bg-black/10 text-muted-foreground'}`}>
+        {isNow && <span className="absolute left-0 top-0 bottom-0 w-[3px] bg-amber-400" />}
+        {h}
+      </div>
       {pros.map((p, pi) => {
         const a = cellMap.get(`${p.id}|${h}`);
         const isFirst = pi === 0;
@@ -265,7 +308,7 @@ function SlotRow({ h, idx, pros, cellMap, onEmpty, onAppt }: {
           <button key={p.id}
             onClick={() => (a ? onAppt(a) : onEmpty(p.id))}
             className={`border-b border-border/60 ${isFirst ? '' : 'border-l border-border/30'} p-1.5 text-left transition-all duration-150 min-h-[58px] group ${
-              isEven ? 'bg-background/30' : 'bg-black/10'
+              isNow ? 'bg-amber-500/[0.07]' : isEven ? 'bg-background/30' : 'bg-black/10'
             } ${a
               ? 'hover:brightness-110 cursor-pointer'
               : 'hover:bg-black/20 cursor-pointer'
@@ -358,4 +401,15 @@ function ApptDetailDialog({ appt, onClose, onChanged }: {
       </DialogContent>
     </Dialog>
   );
+}
+
+// Retorna true se o horário do slot "h" (HH:MM) contém o momento atual "now" (HH:MM)
+function isSlotNow(h: string, now: string, slotMin: number): boolean {
+  const toMin = (s: string) => {
+    const [hh, mm] = s.split(":").map(Number);
+    return hh * 60 + mm;
+  };
+  const start = toMin(h);
+  const cur = toMin(now);
+  return cur >= start && cur < start + slotMin;
 }

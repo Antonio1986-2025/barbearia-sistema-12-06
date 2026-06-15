@@ -1,20 +1,42 @@
 {
   "name": "Barbearia Status",
-  "short_name": "Barbearia",
+  "short_name": "Status",
   "description": "Sistema de gestão da Barbearia Status: agenda, clientes, caixa e agendamentos",
-  "start_url": "/",
+  "start_url": "/agenda",
   "display": "standalone",
   "background_color": "#0e0a05",
   "theme_color": "#0e0a05",
   "orientation": "portrait-primary",
   "lang": "pt-BR",
+  "dir": "ltr",
   "scope": "/",
   "icons": [
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" },
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
   ],
-  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Agenda",
+      "short_name": "Agenda",
+      "description": "Ver a agenda do dia",
+      "url": "/agenda",
+      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Comandas",
+      "short_name": "Comandas",
+      "description": "Comandas abertas",
+      "url": "/comandas",
+      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Novo agendamento",
+      "short_name": "Agendar",
+      "description": "Criar um novo agendamento",
+      "url": "/agendar",
+      "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ],
   "categories": ["business", "productivity"],
   "prefer_related_applications": false
 }
