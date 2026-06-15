@@ -4,6 +4,8 @@ import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 
+import { cloudflare } from "@cloudflare/vite-plugin";
+
 // Configuração padrão do TanStack Start + Vite (sem wrappers proprietários).
 // Ordem dos plugins importa: tsConfigPaths resolve os aliases do tsconfig (ex.: "@/*"),
 // tanstackStart deve vir antes do viteReact, e tailwindcss por último.
@@ -24,5 +26,10 @@ export default defineConfig({
     }),
     viteReact(),
     tailwindcss(),
+    cloudflare({
+      viteEnvironment: {
+        name: "ssr"
+      }
+    })
   ],
 });
