@@ -1,6 +1,6 @@
-/**
+﻿/**
  * Servidor do Agente de IA para WhatsApp - v3.0
- * Usa OpenAI Function Calling para extração robusta de dados
+ * Usa OpenAI Function Calling para extraÃ§Ã£o robusta de dados
  */
 
 import express from 'express';
@@ -10,7 +10,7 @@ import axios from 'axios';
 import { readFileSync } from 'fs';
 
 // ============================================================
-// CARREGAMENTO DE VARIÁVEIS DE AMBIENTE
+// CARREGAMENTO DE VARIÃVEIS DE AMBIENTE
 // ============================================================
 function loadEnv() {
   try {
@@ -25,12 +25,12 @@ function loadEnv() {
         process.env[key] = value;
       }
     });
-    console.log('✅ Arquivo .env carregado');
+    console.log('âœ… Arquivo .env carregado');
   } catch (error) {
     if (process.env.NODE_ENV === 'production') {
-      console.log('ℹ️ Rodando em produção - usando variáveis de ambiente');
+      console.log('â„¹ï¸ Rodando em produÃ§Ã£o - usando variÃ¡veis de ambiente');
     } else {
-      console.warn('⚠️ Arquivo .env não encontrado:', error.message);
+      console.warn('âš ï¸ Arquivo .env nÃ£o encontrado:', error.message);
     }
   }
 }
@@ -38,7 +38,7 @@ function loadEnv() {
 loadEnv();
 
 // ============================================================
-// CONFIGURAÇÕES
+// CONFIGURAÃ‡Ã•ES
 // ============================================================
 const PORT = process.env.PORT || process.env.AI_PORT || 3001;
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
@@ -49,13 +49,14 @@ const EVOLUTION_URL = process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ Supabase não configurado'); process.exit(1); }
-if (!OPENAI_API_KEY) { console.error('❌ OpenAI API Key não configurada'); process.exit(1); }
-if (!EVOLUTION_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) { console.error('❌ Evolution API não configurada'); process.exit(1); }
+if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('âŒ Supabase nÃ£o configurado'); process.exit(1); }
+if (!OPENAI_API_KEY) { console.error('âŒ OpenAI API Key nÃ£o configurada'); process.exit(1); }
+if (!EVOLUTION_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) { console.error('âŒ Evolution API nÃ£o configurada'); process.exit(1); }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
 const conversations = new Map();
+const processingPhones = new Set();
 
 setInterval(() => {
   const now = Date.now();
@@ -63,48 +64,48 @@ setInterval(() => {
   for (const [phone, conv] of conversations.entries()) {
     if (now - conv.lastUpdate > ONE_HOUR) {
       conversations.delete(phone);
-      console.log(`🧹 Conversa de ${phone} expirou`);
+      console.log(`ðŸ§¹ Conversa de ${phone} expirou`);
     }
   }
 }, 60 * 60 * 1000);
 
-const SYSTEM_PROMPT = `Você é um assistente virtual da Barbearia Status em Coxim, MS, especializado em agendamentos via WhatsApp.
+const SYSTEM_PROMPT = `VocÃª Ã© um assistente virtual da Barbearia Status em Coxim, MS, especializado em agendamentos via WhatsApp.
 
-INFORMAÇÕES DA BARBEARIA:
+INFORMAÃ‡Ã•ES DA BARBEARIA:
 - Nome: Barbearia Status
-- Localização: Coxim, MS
+- LocalizaÃ§Ã£o: Coxim, MS
 - Desde: 1991
 
 SEU COMPORTAMENTO:
-- Seja amigável, profissional e direto
+- Seja amigÃ¡vel, profissional e direto
 - Use linguagem informal mas respeitosa
 - Mensagens curtas funcionam melhor no WhatsApp
-- Use emojis com moderação
+- Use emojis com moderaÃ§Ã£o
 - Chame o cliente pelo nome quando souber
 
-DADOS NECESSÁRIOS PARA AGENDAMENTO:
+DADOS NECESSÃRIOS PARA AGENDAMENTO:
 1. Nome completo do cliente (titular do telefone)
-2. Para quem é o serviço (próprio cliente ou dependente)
+2. Para quem Ã© o serviÃ§o (prÃ³prio cliente ou dependente)
 3. Se for dependente: nome do dependente
 4. Profissional escolhido
-5. Serviço escolhido
+5. ServiÃ§o escolhido
 6. Data
-7. Horário
+7. HorÃ¡rio
 
-INSTRUÇÕES IMPORTANTES:
-- Use a função "extrairDadosAgendamento" SEMPRE que o cliente mencionar qualquer dado novo
-- Mesmo se a primeira mensagem já trouxer vários dados, extraia TODOS de uma vez
-- Use a função "confirmarAgendamento" APENAS quando TODOS os dados estiverem completos E o cliente confirmar
+INSTRUÃ‡Ã•ES IMPORTANTES:
+- Use a funÃ§Ã£o "extrairDadosAgendamento" SEMPRE que o cliente mencionar qualquer dado novo
+- Mesmo se a primeira mensagem jÃ¡ trouxer vÃ¡rios dados, extraia TODOS de uma vez
+- Use a funÃ§Ã£o "confirmarAgendamento" APENAS quando TODOS os dados estiverem completos E o cliente confirmar
 - Se faltar algum dado, pergunte de forma natural
-- Antes de confirmar, SEMPRE recapitule todos os dados e peça confirmação explícita
-- Sempre apresente as opções numeradas (1, 2, 3...) para profissionais e serviços`;
+- Antes de confirmar, SEMPRE recapitule todos os dados e peÃ§a confirmaÃ§Ã£o explÃ­cita
+- Sempre apresente as opÃ§Ãµes numeradas (1, 2, 3...) para profissionais e serviÃ§os`;
 
 const FUNCTIONS = [
   {
     type: "function",
     function: {
       name: "extrairDadosAgendamento",
-      description: "Extrai dados do agendamento da mensagem do cliente. Use SEMPRE que houver qualquer informação nova.",
+      description: "Extrai dados do agendamento da mensagem do cliente. Use SEMPRE que houver qualquer informaÃ§Ã£o nova.",
       parameters: {
         type: "object",
         properties: {
@@ -112,9 +113,9 @@ const FUNCTIONS = [
           para: { type: "string", enum: ["mim", "outro"], description: "Quem vai receber: 'mim' ou 'outro' (dependente)" },
           dependente_nome: { type: "string", description: "Nome do dependente (filho, esposa, etc)" },
           profissional_nome: { type: "string", description: "Nome do profissional/barbeiro" },
-          servico_nome: { type: "string", description: "Nome do serviço" },
-          data: { type: "string", description: "Data em formato YYYY-MM-DD. Converta 'hoje', 'amanhã', etc." },
-          hora: { type: "string", description: "Horário em formato HH:MM (24h). Ex: '13h' → '13:00'" }
+          servico_nome: { type: "string", description: "Nome do serviÃ§o" },
+          data: { type: "string", description: "Data em formato YYYY-MM-DD. Converta 'hoje', 'amanhÃ£', etc." },
+          hora: { type: "string", description: "HorÃ¡rio em formato HH:MM (24h). Ex: '13h' â†’ '13:00'" }
         }
       }
     }
@@ -123,7 +124,7 @@ const FUNCTIONS = [
     type: "function",
     function: {
       name: "confirmarAgendamento",
-      description: "Confirma e cria o agendamento. SOMENTE chame após cliente confirmar explicitamente.",
+      description: "Confirma e cria o agendamento. SOMENTE chame apÃ³s cliente confirmar explicitamente.",
       parameters: {
         type: "object",
         properties: {
@@ -142,9 +143,9 @@ async function sendWhatsApp(phone, message) {
       { number: phone, text: message },
       { headers: { 'apikey': EVOLUTION_API_KEY, 'Content-Type': 'application/json' } }
     );
-    console.log(`✅ Mensagem enviada para ${phone}`);
+    console.log(`âœ… Mensagem enviada para ${phone}`);
   } catch (error) {
-    console.error('❌ Erro ao enviar WhatsApp:', error.response?.data || error.message);
+    console.error('âŒ Erro ao enviar WhatsApp:', error.response?.data || error.message);
     throw error;
   }
 }
@@ -155,9 +156,9 @@ async function buscarDados() {
     supabase.from('services').select('id, nome, duracao, preco').eq('ativo', true).order('ordem'),
     supabase.from('settings').select('*').maybeSingle()
   ]);
-  if (pros.error) console.error('❌ Erro ao buscar profissionais:', pros.error);
-  if (svcs.error) console.error('❌ Erro ao buscar serviços:', svcs.error);
-  console.log(`📊 DB: professionals=${pros.data?.length || 0} services=${svcs.data?.length || 0}`);
+  if (pros.error) console.error('âŒ Erro ao buscar profissionais:', pros.error);
+  if (svcs.error) console.error('âŒ Erro ao buscar serviÃ§os:', svcs.error);
+  console.log(`ðŸ“Š DB: professionals=${pros.data?.length || 0} services=${svcs.data?.length || 0}`);
   return { professionals: pros.data || [], services: svcs.data || [], settings: settings.data };
 }
 
@@ -208,39 +209,54 @@ function encontrarServico(nome, services) {
 }
 
 async function criarAgendamento(context) {
-  console.log('🔨 [criarAgendamento] Iniciando...');
-  console.log('📋 Contexto recebido:', JSON.stringify(context, null, 2));
+  console.log('ðŸ”¨ [criarAgendamento] Iniciando...');
+  console.log('ðŸ“‹ Contexto recebido:', JSON.stringify(context, null, 2));
 
   const erros = [];
   if (!context.nome) erros.push('nome do cliente');
   if (!context.prof_id) erros.push('profissional');
-  if (!context.servico_id) erros.push('serviço');
+  if (!context.servico_id) erros.push('serviÃ§o');
   if (!context.data) erros.push('data');
-  if (!context.hora) erros.push('horário');
+  if (!context.hora) erros.push('horÃ¡rio');
   if (erros.length > 0) throw new Error(`Dados faltando: ${erros.join(', ')}`);
 
   const cleanPhone = String(context.telefone).replace(/\D/g, '');
 
   const { data: pro, error: proError } = await supabase.from('professionals').select('*').eq('id', context.prof_id).single();
-  if (proError || !pro) throw new Error(`Profissional não encontrado (id: ${context.prof_id})`);
+  if (proError || !pro) throw new Error(`Profissional nÃ£o encontrado (id: ${context.prof_id})`);
 
   const { data: svc, error: svcError } = await supabase.from('services').select('*').eq('id', context.servico_id).single();
-  if (svcError || !svc) throw new Error(`Serviço não encontrado (id: ${context.servico_id})`);
+  if (svcError || !svc) throw new Error(`ServiÃ§o nÃ£o encontrado (id: ${context.servico_id})`);
 
-  console.log(`✅ Profissional: ${pro.nome}, Serviço: ${svc.nome}`);
+  console.log(`âœ… Profissional: ${pro.nome}, ServiÃ§o: ${svc.nome}`);
 
   const nomeTitular = String(context.nome || '').trim();
   const nomeDep = String(context.dependente_nome || '').trim();
-  const clienteFinal = (context.para === 'outro' && nomeDep) ? `${nomeTitular} · ${nomeDep}` : nomeTitular;
+  const clienteFinal = (context.para === 'outro' && nomeDep) ? `${nomeTitular} Â· ${nomeDep}` : nomeTitular;
 
-  console.log(`👤 Cliente final: ${clienteFinal}`);
+  console.log(`ðŸ‘¤ Cliente final: ${clienteFinal}`);
 
   const { error: clienteError } = await supabase.from('clients').upsert(
     { nome: nomeTitular, tel: cleanPhone, visitas: 0, total_gasto: 0 },
     { onConflict: 'tel', ignoreDuplicates: false }
   );
-  if (clienteError) console.warn('⚠️ Aviso no upsert de cliente:', clienteError.message);
+  if (clienteError) console.warn('âš ï¸ Aviso no upsert de cliente:', clienteError.message);
 
+
+  // IDEMPOTENCIA: evita duplicar agendamento/comanda se o webhook for reenviado
+  const { data: jaExiste } = await supabase
+    .from('appointments')
+    .select('id')
+    .eq('tel', cleanPhone)
+    .eq('data', context.data)
+    .eq('hora', context.hora)
+    .eq('prof_id', pro.id)
+    .neq('status', 'cancelado')
+    .maybeSingle();
+  if (jaExiste) {
+    console.log(`â™»ï¸ Agendamento jÃ¡ existe (${jaExiste.id}) â€” ignorando duplicata`);
+    return { appt: jaExiste, pro, svc, jaExistia: true };
+  }
   const { data: appt, error: apptError } = await supabase.from('appointments').insert({
     prof_id: pro.id,
     data: context.data,
@@ -257,11 +273,11 @@ async function criarAgendamento(context) {
   }).select().single();
 
   if (apptError || !appt) {
-    console.error('❌ Erro ao inserir agendamento:', apptError);
+    console.error('âŒ Erro ao inserir agendamento:', apptError);
     throw new Error(`Erro ao criar agendamento: ${apptError?.message || 'desconhecido'}`);
   }
 
-  console.log(`📅 Agendamento criado: ${appt.id}`);
+  console.log(`ðŸ“… Agendamento criado: ${appt.id}`);
 
   try {
     const { data: lastCmd } = await supabase.from('commands').select('numero').order('numero', { ascending: false }).limit(1).maybeSingle();
@@ -275,10 +291,10 @@ async function criarAgendamento(context) {
         command_id: cmd.id, descricao: svc.nome, valor: Number(svc.preco),
         prof_id: pro.id, tipo: 'servico'
       });
-      console.log(`💼 Comanda aberta: #${nextNum}`);
+      console.log(`ðŸ’¼ Comanda aberta: #${nextNum}`);
     }
   } catch (cmdErr) {
-    console.warn('⚠️ Erro ao abrir comanda:', cmdErr.message);
+    console.warn('âš ï¸ Erro ao abrir comanda:', cmdErr.message);
   }
 
   return { appt, pro, svc };
@@ -288,37 +304,37 @@ async function processarExtracao(args, context, professionals, services) {
   const updates = {};
   if (args.nome && !context.nome) {
     updates.nome = args.nome.trim();
-    console.log(`📝 Nome extraído: ${updates.nome}`);
+    console.log(`ðŸ“ Nome extraÃ­do: ${updates.nome}`);
   }
   if (args.para) {
     updates.para = args.para;
-    console.log(`👥 Para: ${args.para}`);
+    console.log(`ðŸ‘¥ Para: ${args.para}`);
   }
   if (args.dependente_nome) {
     updates.dependente_nome = args.dependente_nome.trim();
-    console.log(`👶 Dependente: ${updates.dependente_nome}`);
+    console.log(`ðŸ‘¶ Dependente: ${updates.dependente_nome}`);
   }
   if (args.profissional_nome && !context.prof_id) {
     const pro = encontrarProfissional(args.profissional_nome, professionals);
     if (pro) {
       updates.prof_id = pro.id;
-      console.log(`👤 Profissional encontrado: ${pro.nome} (id: ${pro.id})`);
+      console.log(`ðŸ‘¤ Profissional encontrado: ${pro.nome} (id: ${pro.id})`);
     } else {
-      console.log(`⚠️ Profissional não encontrado: "${args.profissional_nome}"`);
+      console.log(`âš ï¸ Profissional nÃ£o encontrado: "${args.profissional_nome}"`);
     }
   }
   if (args.servico_nome && !context.servico_id) {
     const svc = encontrarServico(args.servico_nome, services);
     if (svc) {
       updates.servico_id = svc.id;
-      console.log(`✂️ Serviço encontrado: ${svc.nome}`);
+      console.log(`âœ‚ï¸ ServiÃ§o encontrado: ${svc.nome}`);
     } else {
-      console.log(`⚠️ Serviço não encontrado: "${args.servico_nome}"`);
+      console.log(`âš ï¸ ServiÃ§o nÃ£o encontrado: "${args.servico_nome}"`);
     }
   }
   if (args.data && /^\d{4}-\d{2}-\d{2}$/.test(args.data)) {
     updates.data = args.data;
-    console.log(`📅 Data: ${args.data}`);
+    console.log(`ðŸ“… Data: ${args.data}`);
   }
   if (args.hora) {
     const match = args.hora.match(/^(\d{1,2}):?(\d{2})?$/);
@@ -326,7 +342,7 @@ async function processarExtracao(args, context, professionals, services) {
       const h = String(Math.min(23, parseInt(match[1]))).padStart(2, '0');
       const m = String(match[2] || '00').padStart(2, '0');
       updates.hora = `${h}:${m}`;
-      console.log(`🕐 Hora: ${updates.hora}`);
+      console.log(`ðŸ• Hora: ${updates.hora}`);
     }
   }
   return updates;
@@ -336,30 +352,30 @@ function extrairFallback(userMessage, context, professionals, services) {
   const msg = userMessage.toLowerCase().trim();
   const numIsolado = /^\d{1,2}$/.test(msg) ? parseInt(msg) : null;
 
-  // PROFISSIONAL — só se ainda não escolhido
+  // PROFISSIONAL â€” sÃ³ se ainda nÃ£o escolhido
   if (!context.prof_id) {
     if (numIsolado && numIsolado >= 1 && numIsolado <= professionals.length) {
       context.prof_id = professionals[numIsolado - 1].id;
-      console.log(`👤 [fallback] Profissional por número ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
+      console.log(`ðŸ‘¤ [fallback] Profissional por nÃºmero ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
     } else {
       for (const p of professionals) {
         const nome = p.nome.toLowerCase();
         if (msg.includes(nome) || nome.includes(msg.split(' ')[0])) {
           context.prof_id = p.id;
-          console.log(`👤 [fallback] Profissional por nome: ${p.nome}`);
+          console.log(`ðŸ‘¤ [fallback] Profissional por nome: ${p.nome}`);
           break;
         }
       }
     }
   }
 
-  // SERVIÇO — só se ainda não escolhido
+  // SERVIÃ‡O â€” sÃ³ se ainda nÃ£o escolhido
   if (!context.servico_id) {
     let melhor = null;
 
     if (context.prof_id && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
       melhor = services[numIsolado - 1];
-      console.log(`✂️ [fallback] Serviço por número ${numIsolado}: ${melhor.nome}`);
+      console.log(`âœ‚ï¸ [fallback] ServiÃ§o por nÃºmero ${numIsolado}: ${melhor.nome}`);
     }
 
     if (!melhor) {
@@ -386,7 +402,7 @@ function extrairFallback(userMessage, context, professionals, services) {
 
     if (melhor) {
       context.servico_id = melhor.id;
-      console.log(`✂️ [fallback] Serviço detectado: ${melhor.nome}`);
+      console.log(`âœ‚ï¸ [fallback] ServiÃ§o detectado: ${melhor.nome}`);
     }
   }
 }
@@ -394,35 +410,41 @@ function extrairFallback(userMessage, context, professionals, services) {
 function montarContextInfo(context, professionals, services, settings, livres) {
   let info = `\n\nDATA ATUAL: ${new Date().toISOString().split('T')[0]}\n`;
   info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
-  info += `- Nome titular: ${context.nome || '(NÃO INFORMADO)'}\n`;
-  info += `- Para: ${context.para || '(não informado)'}\n`;
-  info += `- Dependente: ${context.dependente_nome || '(não informado)'}\n`;
+  info += `- Nome titular: ${context.nome || '(NÃƒO INFORMADO)'}\n`;
+  info += `- Para: ${context.para || '(nÃ£o informado)'}\n`;
+  info += `- Dependente: ${context.dependente_nome || '(nÃ£o informado)'}\n`;
   if (context.prof_id) {
     const p = professionals.find(p => p.id === context.prof_id);
     info += `- Profissional: ${p?.nome || '?'} (id: ${context.prof_id})\n`;
   } else {
-    info += `- Profissional: (não escolhido)\n`;
+    info += `- Profissional: (nÃ£o escolhido)\n`;
   }
   if (context.servico_id) {
     const s = services.find(s => s.id === context.servico_id);
-    info += `- Serviço: ${s?.nome || '?'} - R$ ${s?.preco || '?'}\n`;
+    info += `- ServiÃ§o: ${s?.nome || '?'} - R$ ${s?.preco || '?'}\n`;
   } else {
-    info += `- Serviço: (não escolhido)\n`;
+    info += `- ServiÃ§o: (nÃ£o escolhido)\n`;
   }
-  info += `- Data: ${context.data || '(não informada)'}\n`;
-  info += `- Horário: ${context.hora || '(não informado)'}\n`;
-  info += `\nBARBEIROS DISPONÍVEIS:\n`;
+  info += `- Data: ${context.data || '(nÃ£o informada)'}\n`;
+  info += `- HorÃ¡rio: ${context.hora || '(nÃ£o informado)'}\n`;
+  info += `\nBARBEIROS DISPONÃVEIS:\n`;
   professionals.forEach((p, i) => info += `${i + 1}. ${p.nome} (${p.categoria})\n`);
-  info += `\nSERVIÇOS DISPONÍVEIS:\n`;
+  info += `\nSERVIÃ‡OS DISPONÃVEIS:\n`;
   services.forEach((s, i) => info += `${i + 1}. ${s.nome} - ${s.duracao}min - R$ ${Number(s.preco).toFixed(2)}\n`);
   if (livres && livres.length > 0) {
-    info += `\nHORÁRIOS LIVRES PARA ${context.data}:\n`;
+    info += `\nHORÃRIOS LIVRES PARA ${context.data}:\n`;
     livres.forEach((h, i) => info += `${i + 1}. ${h}\n`);
   }
   return info;
 }
 
 async function processarMensagem(phone, userMessage) {
+  if (processingPhones.has(phone)) {
+    console.log(`⏳ [${phone}] já em processamento — ignorando duplicata`);
+    return;
+  }
+  processingPhones.add(phone);
+  try {
   let conv = conversations.get(phone);
   if (!conv) {
     conv = { context: { telefone: phone }, history: [], lastUpdate: Date.now() };
@@ -447,7 +469,7 @@ async function processarMensagem(phone, userMessage) {
 
   const messages = [{ role: 'system', content: SYSTEM_PROMPT + contextInfo }, ...conv.history];
 
-  console.log(`🤖 Chamando OpenAI...`);
+  console.log(`ðŸ¤– Chamando OpenAI...`);
 
   let completion;
   try {
@@ -460,8 +482,8 @@ async function processarMensagem(phone, userMessage) {
       max_tokens: 500
     });
   } catch (err) {
-    console.error('❌ Erro OpenAI:', err.message);
-    await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? 😅');
+    console.error('âŒ Erro OpenAI:', err.message);
+    await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? ðŸ˜…');
     return;
   }
 
@@ -475,9 +497,9 @@ async function processarMensagem(phone, userMessage) {
       const funcName = toolCall.function.name;
       let args;
       try { args = JSON.parse(toolCall.function.arguments); }
-      catch (e) { console.error(`❌ Erro ao parsear args:`, e); continue; }
+      catch (e) { console.error(`âŒ Erro ao parsear args:`, e); continue; }
 
-      console.log(`🔧 Function call: ${funcName}`, args);
+      console.log(`ðŸ”§ Function call: ${funcName}`, args);
 
       if (funcName === 'extrairDadosAgendamento') {
         const updates = await processarExtracao(args, conv.context, professionals, services);
@@ -492,38 +514,38 @@ async function processarMensagem(phone, userMessage) {
         conv.history.push({
           role: 'tool',
           tool_call_id: toolCall.id,
-          content: JSON.stringify({ success: args.confirmado, message: args.confirmado ? 'Confirmado' : 'Não confirmado' })
+          content: JSON.stringify({ success: args.confirmado, message: args.confirmado ? 'Confirmado' : 'NÃ£o confirmado' })
         });
       }
     }
 
-    console.log(`📊 Contexto atualizado:`, {
-      nome: conv.context.nome || '❌',
-      para: conv.context.para || '❌',
-      dependente_nome: conv.context.dependente_nome || '❌',
-      prof_id: conv.context.prof_id || '❌',
-      servico_id: conv.context.servico_id || '❌',
-      data: conv.context.data || '❌',
-      hora: conv.context.hora || '❌'
+    console.log(`ðŸ“Š Contexto atualizado:`, {
+      nome: conv.context.nome || 'âŒ',
+      para: conv.context.para || 'âŒ',
+      dependente_nome: conv.context.dependente_nome || 'âŒ',
+      prof_id: conv.context.prof_id || 'âŒ',
+      servico_id: conv.context.servico_id || 'âŒ',
+      data: conv.context.data || 'âŒ',
+      hora: conv.context.hora || 'âŒ'
     });
 
     if (deveConfirmar) {
       try {
-        console.log('🎯 Tentando criar agendamento...');
+        console.log('ðŸŽ¯ Tentando criar agendamento...');
         const { appt, pro, svc } = await criarAgendamento(conv.context);
         const dataFormatada = new Date(conv.context.data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
-        const mensagemFinal = `✅ *Agendamento confirmado!*\n\n🎉 Seu horário está garantido!\n\n📋 *Detalhes:*\n• ${dataFormatada}\n• Horário: ${conv.context.hora}\n• Serviço: ${svc.nome}\n• Profissional: ${pro.nome}\n• Valor: R$ ${Number(svc.preco).toFixed(2)}\n\n📍 *Barbearia Status*\nCoxim, MS\n\nAté lá! ✂️`;
+        const mensagemFinal = `âœ… *Agendamento confirmado!*\n\nðŸŽ‰ Seu horÃ¡rio estÃ¡ garantido!\n\nðŸ“‹ *Detalhes:*\nâ€¢ ${dataFormatada}\nâ€¢ HorÃ¡rio: ${conv.context.hora}\nâ€¢ ServiÃ§o: ${svc.nome}\nâ€¢ Profissional: ${pro.nome}\nâ€¢ Valor: R$ ${Number(svc.preco).toFixed(2)}\n\nðŸ“ *Barbearia Status*\nCoxim, MS\n\nAtÃ© lÃ¡! âœ‚ï¸`;
         await sendWhatsApp(phone, mensagemFinal);
-        console.log(`🎉 Agendamento ${appt.id} criado com sucesso!`);
-        setTimeout(() => { conversations.delete(phone); console.log(`🧹 Conversa de ${phone} limpa`); }, 5000);
+        console.log(`ðŸŽ‰ Agendamento ${appt.id} criado com sucesso!`);
+        setTimeout(() => { conversations.delete(phone); console.log(`ðŸ§¹ Conversa de ${phone} limpa`); }, 5000);
         return;
       } catch (error) {
-        console.error('❌ Erro ao criar agendamento:', error.message);
+        console.error('âŒ Erro ao criar agendamento:', error.message);
         console.error('   Contexto:', JSON.stringify(conv.context, null, 2));
-        let mensagemErro = '😅 Tive um problema ao confirmar. ';
+        let mensagemErro = 'ðŸ˜… Tive um problema ao confirmar. ';
         if (error.message.includes('Dados faltando')) mensagemErro += `Ainda faltam: ${error.message.replace('Dados faltando: ', '')}.`;
-        else if (error.message.includes('Profissional não encontrado')) mensagemErro += 'O barbeiro escolhido não está disponível.';
-        else if (error.message.includes('Serviço não encontrado')) mensagemErro += 'O serviço escolhido não está disponível.';
+        else if (error.message.includes('Profissional nÃ£o encontrado')) mensagemErro += 'O barbeiro escolhido nÃ£o estÃ¡ disponÃ­vel.';
+        else if (error.message.includes('ServiÃ§o nÃ£o encontrado')) mensagemErro += 'O serviÃ§o escolhido nÃ£o estÃ¡ disponÃ­vel.';
         else mensagemErro += 'Pode tentar novamente?';
         await sendWhatsApp(phone, mensagemErro);
         return;
@@ -551,11 +573,14 @@ async function processarMensagem(phone, userMessage) {
         await sendWhatsApp(phone, followUpMsg);
       }
     } catch (err) {
-      console.error('❌ Erro no follow-up:', err.message);
-      await sendWhatsApp(phone, 'Posso ajudar com mais alguma informação? 😊');
+      console.error('âŒ Erro no follow-up:', err.message);
+      await sendWhatsApp(phone, 'Posso ajudar com mais alguma informaÃ§Ã£o? ðŸ˜Š');
     }
   } else if (assistantMessage.content) {
     await sendWhatsApp(phone, assistantMessage.content);
+  }
+  } finally {
+    processingPhones.delete(phone);
   }
 }
 
@@ -577,42 +602,42 @@ app.post('/webhook', async (req, res) => {
     let userMessage = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
 
     if (!userMessage && message.message?.audioMessage) {
-      console.log(`🎵 [${phone}]: Áudio recebido`);
+      console.log(`ðŸŽµ [${phone}]: Ãudio recebido`);
       if (message.message.audioMessage.transcript) {
         userMessage = message.message.audioMessage.transcript;
-        console.log(`📝 [${phone}]: Transcrição: ${userMessage}`);
+        console.log(`ðŸ“ [${phone}]: TranscriÃ§Ã£o: ${userMessage}`);
       } else {
-        await sendWhatsApp(phone, 'Recebi seu áudio! Pode digitar a mensagem para eu processar mais rápido? 😊');
+        await sendWhatsApp(phone, 'Recebi seu Ã¡udio! Pode digitar a mensagem para eu processar mais rÃ¡pido? ðŸ˜Š');
         return res.json({ ok: true });
       }
     }
 
     if (!userMessage) return res.json({ ok: true });
 
-    console.log(`\n📱 [${phone}]: ${userMessage}`);
-    processarMensagem(phone, userMessage).catch(err => console.error('❌ Erro no processamento:', err));
+    console.log(`\nðŸ“± [${phone}]: ${userMessage}`);
+    processarMensagem(phone, userMessage).catch(err => console.error('âŒ Erro no processamento:', err));
     res.json({ ok: true });
   } catch (error) {
-    console.error('❌ Erro no webhook:', error);
+    console.error('âŒ Erro no webhook:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
 app.listen(PORT, () => {
   console.log('');
-  console.log('🤖 ═══════════════════════════════════════════');
-  console.log('🤖  AGENTE DE IA - BARBEARIA STATUS v3.0');
-  console.log('🤖 ═══════════════════════════════════════════');
+  console.log('ðŸ¤– â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
+  console.log('ðŸ¤–  AGENTE DE IA - BARBEARIA STATUS v3.0');
+  console.log('ðŸ¤– â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•');
   console.log('');
-  console.log(`✅ Servidor rodando na porta ${PORT}`);
-  console.log(`📍 Webhook: http://localhost:${PORT}/webhook`);
-  console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log(`âœ… Servidor rodando na porta ${PORT}`);
+  console.log(`ðŸ“ Webhook: http://localhost:${PORT}/webhook`);
+  console.log(`ðŸ¥ Health: http://localhost:${PORT}/health`);
   console.log('');
-  console.log('📱 Evolution API:', EVOLUTION_URL);
-  console.log('📱 Instância:', EVOLUTION_INSTANCE);
-  console.log('🤖 Modelo OpenAI:', OPENAI_MODEL);
-  console.log('🔧 Function Calling: ATIVO');
+  console.log('ðŸ“± Evolution API:', EVOLUTION_URL);
+  console.log('ðŸ“± InstÃ¢ncia:', EVOLUTION_INSTANCE);
+  console.log('ðŸ¤– Modelo OpenAI:', OPENAI_MODEL);
+  console.log('ðŸ”§ Function Calling: ATIVO');
   console.log('');
-  console.log('✅ Aguardando mensagens...');
+  console.log('âœ… Aguardando mensagens...');
   console.log('');
 });
