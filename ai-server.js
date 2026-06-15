@@ -1,6 +1,6 @@
 /**
- * Servidor do Agente de IA para WhatsApp
- * Recebe webhooks da Evolution API e processa mensagens
+ * Servidor do Agente de IA para WhatsApp - v3.0
+ * Usa OpenAI Function Calling para extração robusta de dados
  */
 
 import express from 'express';
@@ -11,44 +11,46 @@ import { readFileSync } from 'fs';
 import fetch from 'node-fetch';
 import { Buffer } from 'buffer';
 
-// Carregar .env (opcional - em produção usa variáveis do ambiente)
+// ============================================================
+// CARREGAMENTO DE VARIÁVEIS DE AMBIENTE
+// ============================================================
 function loadEnv() {
   try {
     const envContent = readFileSync('.env', 'utf-8');
-    const env = {};
-    
     envContent.split('\n').forEach(line => {
       line = line.trim();
       if (!line || line.startsWith('#')) return;
-      
       const match = line.match(/^([^=]+)=(.*)$/);
       if (match) {
         const key = match[1].trim();
+<<<<<<< HEAD
         let value = match[2].trim();
         value = value.replace(/^["']|["']$/g, '');
         env[key] = value;
         if (!process.env[key]) {
           process.env[key] = value;
         }
+=======
+        let value = match[2].trim().replace(/^["']|["']$/g, '');
+        process.env[key] = value;
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
       }
     });
-    
     console.log('✅ Arquivo .env carregado');
-    return env;
   } catch (error) {
-    // Em produção, não precisa do .env (variáveis vêm do ambiente)
     if (process.env.NODE_ENV === 'production') {
       console.log('ℹ️ Rodando em produção - usando variáveis de ambiente');
     } else {
       console.warn('⚠️ Arquivo .env não encontrado:', error.message);
     }
-    return {};
   }
 }
 
 loadEnv();
 
-// Configurações
+// ============================================================
+// CONFIGURAÇÕES
+// ============================================================
 const PORT = process.env.PORT || process.env.AI_PORT || 3001;
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
@@ -58,12 +60,11 @@ const EVOLUTION_URL = process.env.EVOLUTION_API_URL || process.env.EVOLUTION_URL
 const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
 
-// Validar configurações
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('❌ Supabase não configurado no .env');
-  process.exit(1);
-}
+if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ Supabase não configurado'); process.exit(1); }
+if (!OPENAI_API_KEY) { console.error('❌ OpenAI API Key não configurada'); process.exit(1); }
+if (!EVOLUTION_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) { console.error('❌ Evolution API não configurada'); process.exit(1); }
 
+<<<<<<< HEAD
 if (!OPENAI_API_KEY) {
   console.error('❌ OpenAI API Key não configurada no .env');
   process.exit(1);
@@ -79,24 +80,24 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   global: { fetch }
 });
 console.log(`🔐 Supabase URL: ${SUPABASE_URL.substring(0, 30)}... key: ${SUPABASE_KEY.substring(0, 15)}...`);
+=======
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
 const openai = new OpenAI({ apiKey: OPENAI_API_KEY });
-
-// Armazenamento de conversas (em memória)
 const conversations = new Map();
 
-// Limpar conversas antigas a cada hora
 setInterval(() => {
   const now = Date.now();
   const ONE_HOUR = 60 * 60 * 1000;
-  
   for (const [phone, conv] of conversations.entries()) {
     if (now - conv.lastUpdate > ONE_HOUR) {
       conversations.delete(phone);
-      console.log(`🧹 Conversa de ${phone} expirou e foi limpa`);
+      console.log(`🧹 Conversa de ${phone} expirou`);
     }
   }
 }, 60 * 60 * 1000);
 
+<<<<<<< HEAD
 // Prompt do sistema
 const SYSTEM_PROMPT = `Você é um assistente virtual da Barbearia Status em Coxim, MS. Seu OBJETIVO é conseguir um agendamento completo: nome, serviço, barbeiro, data e horário.
 
@@ -148,6 +149,75 @@ Tudo certo?"`;
 /**
  * Envia mensagem via WhatsApp
  */
+=======
+const SYSTEM_PROMPT = `Você é um assistente virtual da Barbearia Status em Coxim, MS, especializado em agendamentos via WhatsApp.
+
+INFORMAÇÕES DA BARBEARIA:
+- Nome: Barbearia Status
+- Localização: Coxim, MS
+- Desde: 1991
+
+SEU COMPORTAMENTO:
+- Seja amigável, profissional e direto
+- Use linguagem informal mas respeitosa
+- Mensagens curtas funcionam melhor no WhatsApp
+- Use emojis com moderação
+- Chame o cliente pelo nome quando souber
+
+DADOS NECESSÁRIOS PARA AGENDAMENTO:
+1. Nome completo do cliente (titular do telefone)
+2. Para quem é o serviço (próprio cliente ou dependente)
+3. Se for dependente: nome do dependente
+4. Profissional escolhido
+5. Serviço escolhido
+6. Data
+7. Horário
+
+INSTRUÇÕES IMPORTANTES:
+- Use a função "extrairDadosAgendamento" SEMPRE que o cliente mencionar qualquer dado novo
+- Mesmo se a primeira mensagem já trouxer vários dados, extraia TODOS de uma vez
+- Use a função "confirmarAgendamento" APENAS quando TODOS os dados estiverem completos E o cliente confirmar
+- Se faltar algum dado, pergunte de forma natural
+- Antes de confirmar, SEMPRE recapitule todos os dados e peça confirmação explícita
+- Sempre apresente as opções numeradas (1, 2, 3...) para profissionais e serviços`;
+
+const FUNCTIONS = [
+  {
+    type: "function",
+    function: {
+      name: "extrairDadosAgendamento",
+      description: "Extrai dados do agendamento da mensagem do cliente. Use SEMPRE que houver qualquer informação nova.",
+      parameters: {
+        type: "object",
+        properties: {
+          nome: { type: "string", description: "Nome completo do CLIENTE TITULAR (dono do telefone)" },
+          para: { type: "string", enum: ["mim", "outro"], description: "Quem vai receber: 'mim' ou 'outro' (dependente)" },
+          dependente_nome: { type: "string", description: "Nome do dependente (filho, esposa, etc)" },
+          profissional_nome: { type: "string", description: "Nome do profissional/barbeiro" },
+          servico_nome: { type: "string", description: "Nome do serviço" },
+          data: { type: "string", description: "Data em formato YYYY-MM-DD. Converta 'hoje', 'amanhã', etc." },
+          hora: { type: "string", description: "Horário em formato HH:MM (24h). Ex: '13h' → '13:00'" }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "confirmarAgendamento",
+      description: "Confirma e cria o agendamento. SOMENTE chame após cliente confirmar explicitamente.",
+      parameters: {
+        type: "object",
+        properties: {
+          confirmado: { type: "boolean", description: "Se cliente confirmou explicitamente" }
+        },
+        required: ["confirmado"]
+      }
+    }
+  }
+];
+
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
 async function sendWhatsApp(phone, message) {
   // Parar indicador de digitação antes de enviar
   try {
@@ -163,16 +233,8 @@ async function sendWhatsApp(phone, message) {
   try {
     await axios.post(
       `${EVOLUTION_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
-      {
-        number: phone,
-        text: message
-      },
-      {
-        headers: {
-          'apikey': EVOLUTION_API_KEY,
-          'Content-Type': 'application/json'
-        }
-      }
+      { number: phone, text: message },
+      { headers: { 'apikey': EVOLUTION_API_KEY, 'Content-Type': 'application/json' } }
     );
     console.log(`✅ Mensagem enviada para ${phone}`);
   } catch (error) {
@@ -181,6 +243,7 @@ async function sendWhatsApp(phone, message) {
   }
 }
 
+<<<<<<< HEAD
 /**
  * Envia indicador de digitação (mostra "..." no WhatsApp)
  */
@@ -235,12 +298,15 @@ async function sendStopTyping(phone) {
 /**
  * Busca dados do Supabase
  */
+=======
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
 async function buscarDados() {
-  const [prosResult, svcsResult, settingsResult] = await Promise.all([
+  const [pros, svcs, settings] = await Promise.all([
     supabase.from('professionals').select('id, nome, categoria').eq('ativo', true).order('ordem'),
     supabase.from('services').select('id, nome, duracao, preco').eq('ativo', true).order('ordem'),
     supabase.from('settings').select('*').maybeSingle()
   ]);
+<<<<<<< HEAD
 
   console.log(`📊 DB: professionals=${prosResult.data?.length || 0} services=${svcsResult.data?.length || 0} erros: ${prosResult.error ? 'pro=' + prosResult.error.message : 'none'} ${svcsResult.error ? 'svc=' + svcsResult.error.message : 'none'}`);
 
@@ -249,32 +315,29 @@ async function buscarDados() {
     services: svcsResult.data || [],
     settings: settingsResult.data
   };
+=======
+  if (pros.error) console.error('❌ Erro ao buscar profissionais:', pros.error);
+  if (svcs.error) console.error('❌ Erro ao buscar serviços:', svcs.error);
+  console.log(`📊 DB: professionals=${pros.data?.length || 0} services=${svcs.data?.length || 0}`);
+  return { professionals: pros.data || [], services: svcs.data || [], settings: settings.data };
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
 }
 
-/**
- * Gera slots de horários
- */
 function generateSlots(inicio, fim, intervalo) {
   const slots = [];
   const [hI, mI] = inicio.split(':').map(Number);
   const [hF, mF] = fim.split(':').map(Number);
-  
   let current = hI * 60 + mI;
   const end = hF * 60 + mF;
-  
   while (current < end) {
     const h = Math.floor(current / 60);
     const m = current % 60;
     slots.push(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
     current += intervalo;
   }
-  
   return slots;
 }
 
-/**
- * Busca horários ocupados
- */
 async function buscarOcupados(profId, data) {
   const { data: result } = await supabase
     .from('appointments')
@@ -282,16 +345,35 @@ async function buscarOcupados(profId, data) {
     .eq('prof_id', profId)
     .eq('data', data)
     .neq('status', 'cancelado');
-
   return (result || []).map(r => r.hora.slice(0, 5));
 }
 
-/**
- * Cria agendamento
- */
-async function criarAgendamento(context) {
-  const cleanPhone = context.telefone.replace(/\D/g, '');
+function encontrarProfissional(nome, professionals) {
+  if (!nome) return null;
+  const nomeLower = nome.toLowerCase().trim();
+  let found = professionals.find(p => p.nome.toLowerCase() === nomeLower);
+  if (found) return found;
+  found = professionals.find(p => p.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(p.nome.toLowerCase()));
+  if (found) return found;
+  const primeiroNome = nomeLower.split(' ')[0];
+  found = professionals.find(p => p.nome.toLowerCase().split(' ')[0] === primeiroNome);
+  return found || null;
+}
 
+function encontrarServico(nome, services) {
+  if (!nome) return null;
+  const nomeLower = nome.toLowerCase().trim();
+  let found = services.find(s => s.nome.toLowerCase() === nomeLower);
+  if (found) return found;
+  found = services.find(s => s.nome.toLowerCase().includes(nomeLower) || nomeLower.includes(s.nome.toLowerCase()));
+  return found || null;
+}
+
+async function criarAgendamento(context) {
+  console.log('🔨 [criarAgendamento] Iniciando...');
+  console.log('📋 Contexto recebido:', JSON.stringify(context, null, 2));
+
+<<<<<<< HEAD
   // Buscar profissional e serviço
   const { data: pro, error: proError } = await supabase
     .from('professionals')
@@ -359,63 +441,82 @@ async function criarAgendamento(context) {
   } else if (cliente.nome !== context.nome.trim()) {
     // Atualizar nome se mudou
     await supabase.from('clients').update({ nome: context.nome.trim() }).eq('id', cliente.id);
+=======
+  const erros = [];
+  if (!context.nome) erros.push('nome do cliente');
+  if (!context.prof_id) erros.push('profissional');
+  if (!context.servico_id) erros.push('serviço');
+  if (!context.data) erros.push('data');
+  if (!context.hora) erros.push('horário');
+  if (erros.length > 0) throw new Error(`Dados faltando: ${erros.join(', ')}`);
+
+  const cleanPhone = String(context.telefone).replace(/\D/g, '');
+
+  const { data: pro, error: proError } = await supabase.from('professionals').select('*').eq('id', context.prof_id).single();
+  if (proError || !pro) throw new Error(`Profissional não encontrado (id: ${context.prof_id})`);
+
+  const { data: svc, error: svcError } = await supabase.from('services').select('*').eq('id', context.servico_id).single();
+  if (svcError || !svc) throw new Error(`Serviço não encontrado (id: ${context.servico_id})`);
+
+  console.log(`✅ Profissional: ${pro.nome}, Serviço: ${svc.nome}`);
+
+  const nomeTitular = String(context.nome || '').trim();
+  const nomeDep = String(context.dependente_nome || '').trim();
+  const clienteFinal = (context.para === 'outro' && nomeDep) ? `${nomeTitular} · ${nomeDep}` : nomeTitular;
+
+  console.log(`👤 Cliente final: ${clienteFinal}`);
+
+  const { error: clienteError } = await supabase.from('clients').upsert(
+    { nome: nomeTitular, tel: cleanPhone, visitas: 0, total_gasto: 0 },
+    { onConflict: 'tel', ignoreDuplicates: false }
+  );
+  if (clienteError) console.warn('⚠️ Aviso no upsert de cliente:', clienteError.message);
+
+  const { data: appt, error: apptError } = await supabase.from('appointments').insert({
+    prof_id: pro.id,
+    data: context.data,
+    hora: context.hora,
+    servico: svc.nome,
+    servico_id: svc.id,
+    duracao: svc.duracao,
+    valor: svc.preco,
+    cliente: clienteFinal,
+    tel: cleanPhone,
+    dependente_nome: context.para === 'outro' ? nomeDep : null,
+    status: 'agendado',
+    origem: 'whatsapp'
+  }).select().single();
+
+  if (apptError || !appt) {
+    console.error('❌ Erro ao inserir agendamento:', apptError);
+    throw new Error(`Erro ao criar agendamento: ${apptError?.message || 'desconhecido'}`);
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
   }
 
-  // Criar agendamento
-  const { data: appt } = await supabase
-    .from('appointments')
-    .insert({
-      prof_id: pro.id,
-      data: context.data,
-      hora: context.hora,
-      servico: svc.nome,
-      servico_id: svc.id,
-      duracao: svc.duracao,
-      valor: svc.preco,
-      cliente: clienteFinal,
-      tel: cleanPhone,
-      dependente_nome: context.para === 'mim' ? null : context.dependente_nome?.trim(),
-      status: 'agendado',
-      origem: 'whatsapp'
-    })
-    .select()
-    .single();
+  console.log(`📅 Agendamento criado: ${appt.id}`);
 
-  // Abrir comanda
-  const { data: lastCmd } = await supabase
-    .from('commands')
-    .select('numero')
-    .order('numero', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const nextNum = (lastCmd?.numero || 0) + 1;
-
-  const { data: cmd } = await supabase
-    .from('commands')
-    .insert({
-      numero: nextNum,
-      cliente_nome: clienteFinal,
-      status: 'aberta',
-      abertura: new Date().toISOString(),
-      valor: Number(svc.preco)
-    })
-    .select()
-    .single();
-
-  if (cmd) {
-    await supabase.from('command_items').insert({
-      command_id: cmd.id,
-      descricao: svc.nome,
-      valor: Number(svc.preco),
-      prof_id: pro.id,
-      tipo: 'servico'
-    });
+  try {
+    const { data: lastCmd } = await supabase.from('commands').select('numero').order('numero', { ascending: false }).limit(1).maybeSingle();
+    const nextNum = (lastCmd?.numero || 0) + 1;
+    const { data: cmd, error: cmdError } = await supabase.from('commands').insert({
+      numero: nextNum, cliente_nome: clienteFinal, status: 'aberta',
+      abertura: new Date().toISOString(), valor: Number(svc.preco)
+    }).select().single();
+    if (cmd && !cmdError) {
+      await supabase.from('command_items').insert({
+        command_id: cmd.id, descricao: svc.nome, valor: Number(svc.preco),
+        prof_id: pro.id, tipo: 'servico'
+      });
+      console.log(`💼 Comanda aberta: #${nextNum}`);
+    }
+  } catch (cmdErr) {
+    console.warn('⚠️ Erro ao abrir comanda:', cmdErr.message);
   }
 
   return { appt, pro, svc };
 }
 
+<<<<<<< HEAD
 /**
  * Processa mensagem
  */
@@ -433,27 +534,23 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
       lastUpdate: Date.now()
     };
     conversations.set(phone, conv);
+=======
+async function processarExtracao(args, context, professionals, services) {
+  const updates = {};
+  if (args.nome && !context.nome) {
+    updates.nome = args.nome.trim();
+    console.log(`📝 Nome extraído: ${updates.nome}`);
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
   }
-
-  // Atualizar timestamp
-  conv.lastUpdate = Date.now();
-
-  // Buscar dados
-  const { professionals, services, settings } = await buscarDados();
-
-  // Montar contexto
-  let contextInfo = '\n\nCONTEXTO ATUAL:\n';
-  if (conv.context.nome) contextInfo += `Nome: ${conv.context.nome}\n`;
-  if (conv.context.para) contextInfo += `Para: ${conv.context.para}\n`;
-  if (conv.context.dependente_nome) contextInfo += `Dependente: ${conv.context.dependente_nome}\n`;
-  if (conv.context.prof_id) {
-    const pro = professionals.find(p => p.id === conv.context.prof_id);
-    if (pro) contextInfo += `Barbeiro: ${pro.nome}\n`;
+  if (args.para) {
+    updates.para = args.para;
+    console.log(`👥 Para: ${args.para}`);
   }
-  if (conv.context.servico_id) {
-    const svc = services.find(s => s.id === conv.context.servico_id);
-    if (svc) contextInfo += `Serviço: ${svc.nome} - R$ ${svc.preco}\n`;
+  if (args.dependente_nome) {
+    updates.dependente_nome = args.dependente_nome.trim();
+    console.log(`👶 Dependente: ${updates.dependente_nome}`);
   }
+<<<<<<< HEAD
   if (conv.context.data) contextInfo += `Data: ${conv.context.data}\n`;
   if (conv.context.hora) contextInfo += `Horário: ${conv.context.hora}\n`;
 
@@ -480,10 +577,18 @@ async function processarMensagem(phone, userMessage, imageBase64 = null, mimeTyp
     contextInfo += '\nHORÁRIOS LIVRES:\n';
     if (livres.length > 0) {
       livres.forEach((h, i) => contextInfo += `${i + 1}. ${h}\n`);
+=======
+  if (args.profissional_nome && !context.prof_id) {
+    const pro = encontrarProfissional(args.profissional_nome, professionals);
+    if (pro) {
+      updates.prof_id = pro.id;
+      console.log(`👤 Profissional encontrado: ${pro.nome} (id: ${pro.id})`);
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
     } else {
-      contextInfo += 'Nenhum horário disponível nesta data.\n';
+      console.log(`⚠️ Profissional não encontrado: "${args.profissional_nome}"`);
     }
   }
+<<<<<<< HEAD
 
   // Adicionar mensagem ao histórico
   if (imageBase64) {
@@ -845,26 +950,206 @@ Até lá! ✂️`;
       console.error('Erro ao criar agendamento:', error);
       await sendWhatsApp(phone, 'Desculpe, ocorreu um erro ao confirmar. Pode tentar novamente?');
       return;
+=======
+  if (args.servico_nome && !context.servico_id) {
+    const svc = encontrarServico(args.servico_nome, services);
+    if (svc) {
+      updates.servico_id = svc.id;
+      console.log(`✂️ Serviço encontrado: ${svc.nome}`);
+    } else {
+      console.log(`⚠️ Serviço não encontrado: "${args.servico_nome}"`);
     }
   }
-
-  // Enviar resposta normal
-  await sendWhatsApp(phone, resposta.replace('CONFIRMAR_AGENDAMENTO', '').trim());
+  if (args.data && /^\d{4}-\d{2}-\d{2}$/.test(args.data)) {
+    updates.data = args.data;
+    console.log(`📅 Data: ${args.data}`);
+  }
+  if (args.hora) {
+    const match = args.hora.match(/^(\d{1,2}):?(\d{2})?$/);
+    if (match) {
+      const h = String(Math.min(23, parseInt(match[1]))).padStart(2, '0');
+      const m = String(match[2] || '00').padStart(2, '0');
+      updates.hora = `${h}:${m}`;
+      console.log(`🕐 Hora: ${updates.hora}`);
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
+    }
+  }
+  return updates;
 }
 
-// Servidor Express
+function montarContextInfo(context, professionals, services, settings, livres = null) {
+  let info = `\n\nDATA ATUAL: ${new Date().toISOString().split('T')[0]}\n`;
+  info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
+  info += `- Nome titular: ${context.nome || '(NÃO INFORMADO)'}\n`;
+  info += `- Para: ${context.para || '(não informado)'}\n`;
+  info += `- Dependente: ${context.dependente_nome || '(não informado)'}\n`;
+  if (context.prof_id) {
+    const p = professionals.find(p => p.id === context.prof_id);
+    info += `- Profissional: ${p?.nome || '?'} (id: ${context.prof_id})\n`;
+  } else {
+    info += `- Profissional: (não escolhido)\n`;
+  }
+  if (context.servico_id) {
+    const s = services.find(s => s.id === context.servico_id);
+    info += `- Serviço: ${s?.nome || '?'} - R$ ${s?.preco || '?'}\n`;
+  } else {
+    info += `- Serviço: (não escolhido)\n`;
+  }
+  info += `- Data: ${context.data || '(não informada)'}\n`;
+  info += `- Horário: ${context.hora || '(não informado)'}\n`;
+  info += `\nBARBEIROS DISPONÍVEIS:\n`;
+  professionals.forEach((p, i) => info += `${i + 1}. ${p.nome} (${p.categoria})\n`);
+  info += `\nSERVIÇOS DISPONÍVEIS:\n`;
+  services.forEach((s, i) => info += `${i + 1}. ${s.nome} - ${s.duracao}min - R$ ${Number(s.preco).toFixed(2)}\n`);
+  if (livres && livres.length > 0) {
+    info += `\nHORÁRIOS LIVRES PARA ${context.data}:\n`;
+    livres.forEach((h, i) => info += `${i + 1}. ${h}\n`);
+  }
+  return info;
+}
+
+async function processarMensagem(phone, userMessage) {
+  let conv = conversations.get(phone);
+  if (!conv) {
+    conv = { context: { telefone: phone }, history: [], lastUpdate: Date.now() };
+    conversations.set(phone, conv);
+  }
+  conv.lastUpdate = Date.now();
+
+  const { professionals, services, settings } = await buscarDados();
+
+  let livres = null;
+  if (conv.context.prof_id && conv.context.data && settings) {
+    const slots = generateSlots(settings.horario_inicio || '08:00', settings.horario_fim || '20:00', settings.slot_minutos || 30);
+    const ocupados = await buscarOcupados(conv.context.prof_id, conv.context.data);
+    livres = slots.filter(s => !ocupados.includes(s));
+  }
+
+  const contextInfo = montarContextInfo(conv.context, professionals, services, settings, livres);
+  conv.history.push({ role: 'user', content: userMessage });
+
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT + contextInfo }, ...conv.history];
+
+  console.log(`🤖 Chamando OpenAI...`);
+
+  let completion;
+  try {
+    completion = await openai.chat.completions.create({
+      model: OPENAI_MODEL,
+      messages,
+      tools: FUNCTIONS,
+      tool_choice: "auto",
+      temperature: 0.5,
+      max_tokens: 500
+    });
+  } catch (err) {
+    console.error('❌ Erro OpenAI:', err.message);
+    await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? 😅');
+    return;
+  }
+
+  const assistantMessage = completion.choices[0].message;
+  conv.history.push(assistantMessage);
+
+  if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
+    let deveConfirmar = false;
+
+    for (const toolCall of assistantMessage.tool_calls) {
+      const funcName = toolCall.function.name;
+      let args;
+      try { args = JSON.parse(toolCall.function.arguments); }
+      catch (e) { console.error(`❌ Erro ao parsear args:`, e); continue; }
+
+      console.log(`🔧 Function call: ${funcName}`, args);
+
+      if (funcName === 'extrairDadosAgendamento') {
+        const updates = await processarExtracao(args, conv.context, professionals, services);
+        Object.assign(conv.context, updates);
+        conv.history.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ success: true, dados_atualizados: updates })
+        });
+      } else if (funcName === 'confirmarAgendamento') {
+        if (args.confirmado) deveConfirmar = true;
+        conv.history.push({
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          content: JSON.stringify({ success: args.confirmado, message: args.confirmado ? 'Confirmado' : 'Não confirmado' })
+        });
+      }
+    }
+
+    console.log(`📊 Contexto atualizado:`, {
+      nome: conv.context.nome || '❌',
+      para: conv.context.para || '❌',
+      dependente_nome: conv.context.dependente_nome || '❌',
+      prof_id: conv.context.prof_id || '❌',
+      servico_id: conv.context.servico_id || '❌',
+      data: conv.context.data || '❌',
+      hora: conv.context.hora || '❌'
+    });
+
+    if (deveConfirmar) {
+      try {
+        console.log('🎯 Tentando criar agendamento...');
+        const { appt, pro, svc } = await criarAgendamento(conv.context);
+        const dataFormatada = new Date(conv.context.data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+        const mensagemFinal = `✅ *Agendamento confirmado!*\n\n🎉 Seu horário está garantido!\n\n📋 *Detalhes:*\n• ${dataFormatada}\n• Horário: ${conv.context.hora}\n• Serviço: ${svc.nome}\n• Profissional: ${pro.nome}\n• Valor: R$ ${Number(svc.preco).toFixed(2)}\n\n📍 *Barbearia Status*\nCoxim, MS\n\nAté lá! ✂️`;
+        await sendWhatsApp(phone, mensagemFinal);
+        console.log(`🎉 Agendamento ${appt.id} criado com sucesso!`);
+        setTimeout(() => { conversations.delete(phone); console.log(`🧹 Conversa de ${phone} limpa`); }, 5000);
+        return;
+      } catch (error) {
+        console.error('❌ Erro ao criar agendamento:', error.message);
+        console.error('   Contexto:', JSON.stringify(conv.context, null, 2));
+        let mensagemErro = '😅 Tive um problema ao confirmar. ';
+        if (error.message.includes('Dados faltando')) mensagemErro += `Ainda faltam: ${error.message.replace('Dados faltando: ', '')}.`;
+        else if (error.message.includes('Profissional não encontrado')) mensagemErro += 'O barbeiro escolhido não está disponível.';
+        else if (error.message.includes('Serviço não encontrado')) mensagemErro += 'O serviço escolhido não está disponível.';
+        else mensagemErro += 'Pode tentar novamente?';
+        await sendWhatsApp(phone, mensagemErro);
+        return;
+      }
+    }
+
+    let livresAtualizados = null;
+    if (conv.context.prof_id && conv.context.data && settings) {
+      const slots = generateSlots(settings.horario_inicio || '08:00', settings.horario_fim || '20:00', settings.slot_minutos || 30);
+      const ocupados = await buscarOcupados(conv.context.prof_id, conv.context.data);
+      livresAtualizados = slots.filter(s => !ocupados.includes(s));
+    }
+    const contextInfoAtualizado = montarContextInfo(conv.context, professionals, services, settings, livresAtualizados);
+
+    try {
+      const followUp = await openai.chat.completions.create({
+        model: OPENAI_MODEL,
+        messages: [{ role: 'system', content: SYSTEM_PROMPT + contextInfoAtualizado }, ...conv.history],
+        temperature: 0.5,
+        max_tokens: 400
+      });
+      const followUpMsg = followUp.choices[0].message.content;
+      if (followUpMsg) {
+        conv.history.push({ role: 'assistant', content: followUpMsg });
+        await sendWhatsApp(phone, followUpMsg);
+      }
+    } catch (err) {
+      console.error('❌ Erro no follow-up:', err.message);
+      await sendWhatsApp(phone, 'Posso ajudar com mais alguma informação? 😊');
+    }
+  } else if (assistantMessage.content) {
+    await sendWhatsApp(phone, assistantMessage.content);
+  }
+}
+
 const app = express();
 app.use(express.json());
 
-// Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    conversations: conversations.size,
-    timestamp: new Date().toISOString()
-  });
+  res.json({ status: 'ok', conversations: conversations.size, timestamp: new Date().toISOString() });
 });
 
+<<<<<<< HEAD
 /**
  * Baixa mídia da Evolution API
  */
@@ -894,23 +1179,17 @@ async function transcribeAudio(audioBuffer) {
 }
 
 // Webhook
+=======
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
 app.post('/webhook', async (req, res) => {
   try {
     const payload = req.body;
-
-    // Verificar evento
-    if (payload.event !== 'messages.upsert') {
-      return res.json({ ok: true });
-    }
-
+    if (payload.event !== 'messages.upsert') return res.json({ ok: true });
     const message = payload.data;
-
-    // Ignorar mensagens enviadas por nós ou de grupos
-    if (message.key.fromMe || message.key.remoteJid.includes('@g.us')) {
-      return res.json({ ok: true });
-    }
+    if (message.key.fromMe || message.key.remoteJid.includes('@g.us')) return res.json({ ok: true });
 
     const phone = message.key.remoteJid.replace('@s.whatsapp.net', '');
+<<<<<<< HEAD
     const msgText = message.message?.conversation || 
                     message.message?.extendedTextMessage?.text || '';
     const audioMsg = message.message?.audioMessage;
@@ -950,20 +1229,36 @@ app.post('/webhook', async (req, res) => {
     processarMensagem(phone, msgText).catch(err => {
       console.error('Erro ao processar:', err);
     });
+=======
+    let userMessage = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
 
+    if (!userMessage && message.message?.audioMessage) {
+      console.log(`🎵 [${phone}]: Áudio recebido`);
+      if (message.message.audioMessage.transcript) {
+        userMessage = message.message.audioMessage.transcript;
+        console.log(`📝 [${phone}]: Transcrição: ${userMessage}`);
+      } else {
+        await sendWhatsApp(phone, 'Recebi seu áudio! Pode digitar a mensagem para eu processar mais rápido? 😊');
+        return res.json({ ok: true });
+      }
+    }
+
+    if (!userMessage) return res.json({ ok: true });
+>>>>>>> f09147e (feat(ai-agent): v3.0 com OpenAI Function Calling para extracao robusta)
+
+    console.log(`\n📱 [${phone}]: ${userMessage}`);
+    processarMensagem(phone, userMessage).catch(err => console.error('❌ Erro no processamento:', err));
     res.json({ ok: true });
-
   } catch (error) {
-    console.error('Erro no webhook:', error);
+    console.error('❌ Erro no webhook:', error);
     res.status(500).json({ error: 'Internal error' });
   }
 });
 
-// Iniciar servidor
 app.listen(PORT, () => {
   console.log('');
   console.log('🤖 ═══════════════════════════════════════════');
-  console.log('🤖  AGENTE DE IA - BARBEARIA STATUS');
+  console.log('🤖  AGENTE DE IA - BARBEARIA STATUS v3.0');
   console.log('🤖 ═══════════════════════════════════════════');
   console.log('');
   console.log(`✅ Servidor rodando na porta ${PORT}`);
@@ -973,6 +1268,7 @@ app.listen(PORT, () => {
   console.log('📱 Evolution API:', EVOLUTION_URL);
   console.log('📱 Instância:', EVOLUTION_INSTANCE);
   console.log('🤖 Modelo OpenAI:', OPENAI_MODEL);
+  console.log('🔧 Function Calling: ATIVO');
   console.log('');
   console.log('✅ Aguardando mensagens...');
   console.log('');
