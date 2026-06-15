@@ -1,66 +1,34 @@
 /**
- * Helper que obtém variáveis de ambiente em qualquer runtime suportado.
+ * Helper para obter variáveis de ambiente em qualquer runtime suportado.
  *
- * - Em Node.js (dev local, VPS): lê de `process.env`
- * - Em Cloudflare Workers: usa `import("cloudflare:workers")` que expõe `env`
+ * Em Cloudflare Workers com `nodejs_compat` e compatibility_date >= 2024-09-23,
+ * `process.env` é populado automaticamente com as bindings do Worker
+ * (variables/secrets do dashboard).
  *
- * Cacheia o resultado para chamadas subsequentes.
+ * Em Node.js (dev local), `process.env` é o ambiente padrão.
  *
- * Uso:
- *   const url = await getServerEnv("SUPABASE_URL");
+ * Por isso basta ler `process.env` aqui — funciona nos dois runtimes.
  */
 
 type EnvBag = Record<string, string | undefined>;
 
-let cachedBag: EnvBag | null = null;
-let pendingBag: Promise<EnvBag> | null = null;
-
-async function loadBag(): Promise<EnvBag> {
-  // Tenta Cloudflare Workers primeiro (em runtime Worker, "cloudflare:workers" resolve)
-  try {
-    const mod = (await import(/* @vite-ignore */ "cloudflare:workers")) as {
-      env?: Record<string, unknown>;
-    };
-    if (mod?.env && typeof mod.env === "object") {
-      const cfBag: EnvBag = {};
-      for (const [k, v] of Object.entries(mod.env)) {
-        if (typeof v === "string") cfBag[k] = v;
-      }
-      // Mescla com process.env (process.env tem prioridade quando ambos existem)
-      const procEnv =
-        typeof process !== "undefined" && process.env ? process.env : ({} as EnvBag);
-      return { ...cfBag, ...procEnv };
-    }
-  } catch {
-    // não estamos em um Worker ou módulo não disponível
-  }
-
-  // Fallback: process.env (Node, dev local)
+function readBag(): EnvBag {
   if (typeof process !== "undefined" && process.env) {
     return process.env as EnvBag;
   }
-
   return {};
 }
 
-async function getBag(): Promise<EnvBag> {
-  if (cachedBag) return cachedBag;
-  if (!pendingBag) pendingBag = loadBag();
-  cachedBag = await pendingBag;
-  return cachedBag;
-}
-
-/** Obtém uma variável de ambiente. Aguarda init na primeira chamada. */
+/** Obtém uma variável de ambiente. */
 export async function getServerEnv(key: string): Promise<string | undefined> {
-  const bag = await getBag();
-  return bag[key];
+  return readBag()[key];
 }
 
 /** Obtém múltiplas variáveis de uma vez. */
 export async function getServerEnvs<K extends string>(
   ...keys: K[]
 ): Promise<Record<K, string | undefined>> {
-  const bag = await getBag();
+  const bag = readBag();
   const out = {} as Record<K, string | undefined>;
   for (const k of keys) out[k] = bag[k];
   return out;
