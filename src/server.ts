@@ -45,17 +45,26 @@ function hydrateProcessEnv(env: unknown) {
 
 // h3 swallows in-handler throws into a normal 500 Response with body
 // {"unhandled":true,"message":"HTTPError"} — try/catch alone never fires for those.
-async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
+async function normalizeCatastrophicSsrResponse(response: Response, url: string): Promise<Response> {
   if (response.status < 500) return response;
+
+  const body = await response.clone().text();
+
+  // Log SEMPRE que houver 500, independente do formato
+  const capturedError = consumeLastCapturedError();
+  if (capturedError) {
+    console.error(`[SSR 500] ${url} — captured error:`, capturedError);
+  } else {
+    console.error(`[SSR 500] ${url} — raw body: ${body.slice(0, 2000)}`);
+  }
+
   const contentType = response.headers.get("content-type") ?? "";
   if (!contentType.includes("application/json")) return response;
 
-  const body = await response.clone().text();
   if (!body.includes('"unhandled":true') || !body.includes('"message":"HTTPError"')) {
     return response;
   }
 
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
   return new Response(renderErrorPage(), {
     status: 500,
     headers: { "content-type": "text/html; charset=utf-8" },
@@ -102,7 +111,7 @@ export default {
 
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return await normalizeCatastrophicSsrResponse(response, url.pathname);
     } catch (error) {
       console.error("[server.ts fetch] caught error:", error);
       return new Response(renderErrorPage(), {
