@@ -584,6 +584,87 @@ async function processarMensagem(phone, userMessage) {
   }
 }
 
+// ============================================================
+// MÃDIA: Ã¡udio (Whisper) e imagem (GPT-4o vision)
+// ============================================================
+
+/**
+ * Baixa a mÃ­dia (Ã¡udio/imagem) de uma mensagem via Evolution API,
+ * retornando { base64, mimetype }.
+ */
+async function baixarMidiaBase64(message) {
+  try {
+    const resp = await axios.post(
+      `${EVOLUTION_URL}/chat/getBase64FromMediaMessage/${EVOLUTION_INSTANCE}`,
+      { message: { key: message.key } },
+      { headers: { apikey: EVOLUTION_API_KEY, 'Content-Type': 'application/json' } }
+    );
+    const data = resp.data || {};
+    const base64 = data.base64 || data.media || data?.message?.base64;
+    const mimetype = data.mimetype || data?.message?.mimetype || '';
+    if (!base64) {
+      console.warn('âš ï¸ getBase64FromMediaMessage nÃ£o retornou base64:', JSON.stringify(data).slice(0, 200));
+      return null;
+    }
+    return { base64, mimetype };
+  } catch (err) {
+    console.error('âŒ Erro ao baixar mÃ­dia:', err.response?.data || err.message);
+    return null;
+  }
+}
+
+/**
+ * Transcreve Ã¡udio (base64) usando OpenAI Whisper.
+ */
+async function transcreverAudio(base64, mimetype = 'audio/ogg') {
+  try {
+    const { toFile } = await import('openai');
+    const buffer = Buffer.from(base64, 'base64');
+    const ext = mimetype.includes('mp3') ? 'mp3' : mimetype.includes('mp4') ? 'mp4' : mimetype.includes('wav') ? 'wav' : 'ogg';
+    const file = await toFile(buffer, `audio.${ext}`, { type: mimetype || 'audio/ogg' });
+    const result = await openai.audio.transcriptions.create({
+      file,
+      model: 'whisper-1',
+      language: 'pt',
+    });
+    return result.text?.trim() || '';
+  } catch (err) {
+    console.error('âŒ Erro ao transcrever Ã¡udio:', err.message);
+    return '';
+  }
+}
+
+/**
+ * Analisa imagem (base64) usando GPT-4o vision e retorna uma descriÃ§Ã£o
+ * em texto, Ãºtil para o fluxo de agendamento.
+ */
+async function analisarImagem(base64, mimetype = 'image/jpeg', caption = '') {
+  try {
+    const dataUrl = `data:${mimetype || 'image/jpeg'};base64,${base64}`;
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 300,
+      messages: [
+        {
+          role: 'system',
+          content: 'VocÃª analisa imagens enviadas por clientes de uma barbearia. Descreva de forma objetiva e curta o que vÃª (ex.: estilo de corte/barba desejado, referÃªncia de cabelo). Se houver texto na imagem (ex.: print de horÃ¡rio), transcreva. Responda em portuguÃªs, em 1-3 frases.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: caption ? `Legenda do cliente: "${caption}". Analise a imagem:` : 'Analise esta imagem enviada pelo cliente:' },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+    });
+    return completion.choices[0]?.message?.content?.trim() || '';
+  } catch (err) {
+    console.error('âŒ Erro ao analisar imagem:', err.message);
+    return '';
+  }
+}
+
 const app = express();
 app.use(express.json());
 
@@ -601,13 +682,37 @@ app.post('/webhook', async (req, res) => {
     const phone = message.key.remoteJid.replace('@s.whatsapp.net', '');
     let userMessage = message.message?.conversation || message.message?.extendedTextMessage?.text || '';
 
+    // ÃUDIO: baixa e transcreve com Whisper
     if (!userMessage && message.message?.audioMessage) {
-      console.log(`ðŸŽµ [${phone}]: Ãudio recebido`);
-      if (message.message.audioMessage.transcript) {
+      console.log(`ðŸŽµ [${phone}]: Ãudio recebido â€” transcrevendo...`);
+      const midia = await baixarMidiaBase64(message);
+      if (midia?.base64) {
+        userMessage = await transcreverAudio(midia.base64, midia.mimetype);
+        console.log(`ðŸ“ [${phone}] TranscriÃ§Ã£o: ${userMessage}`);
+      }
+      if (!userMessage && message.message.audioMessage.transcript) {
         userMessage = message.message.audioMessage.transcript;
-        console.log(`ðŸ“ [${phone}]: TranscriÃ§Ã£o: ${userMessage}`);
-      } else {
-        await sendWhatsApp(phone, 'Recebi seu Ã¡udio! Pode digitar a mensagem para eu processar mais rÃ¡pido? ðŸ˜Š');
+      }
+      if (!userMessage) {
+        await sendWhatsApp(phone, 'NÃ£o consegui entender o Ã¡udio ðŸ˜• Pode escrever ou enviar de novo?');
+        return res.json({ ok: true });
+      }
+    }
+
+    // IMAGEM: baixa e analisa com GPT-4o vision
+    if (!userMessage && message.message?.imageMessage) {
+      console.log(`ðŸ–¼ï¸ [${phone}]: Imagem recebida â€” analisando...`);
+      const caption = message.message.imageMessage.caption || '';
+      const midia = await baixarMidiaBase64(message);
+      if (midia?.base64) {
+        const descricao = await analisarImagem(midia.base64, midia.mimetype, caption);
+        console.log(`ðŸ‘ï¸ [${phone}] AnÃ¡lise da imagem: ${descricao}`);
+        userMessage = caption
+          ? `${caption}\n[Imagem enviada pelo cliente: ${descricao}]`
+          : `[O cliente enviou uma imagem: ${descricao}]`;
+      }
+      if (!userMessage) {
+        await sendWhatsApp(phone, 'Recebi sua imagem mas nÃ£o consegui processÃ¡-la ðŸ˜• Pode descrever o que deseja?');
         return res.json({ ok: true });
       }
     }
