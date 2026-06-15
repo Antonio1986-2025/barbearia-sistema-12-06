@@ -42,7 +42,7 @@ function DiagComponent() {
   );
 }
 
-export const Route = createFileRoute("/__diag")({
+export const Route = createFileRoute("/diag")({
   loader: () => diag(),
   component: DiagComponent,
 });
