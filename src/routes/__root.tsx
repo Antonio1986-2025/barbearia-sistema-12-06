@@ -9,7 +9,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { Topbar } from "@/components/Topbar";
 import { Toaster } from "@/components/ui/sonner";
 
-const PUBLIC_PATHS = ["/login", "/agendar"];
+const PUBLIC_PATHS = ["/login", "/agendar", "/__diag"];
 const ADMIN_ONLY = ["/comandas", "/clientes", "/financeiro", "/estoque", "/relatorios", "/configuracoes"];
 
 function NotFoundComponent() {
