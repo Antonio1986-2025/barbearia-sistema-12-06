@@ -332,6 +332,65 @@ async function processarExtracao(args, context, professionals, services) {
   return updates;
 }
 
+function extrairFallback(userMessage, context, professionals, services) {
+  const msg = userMessage.toLowerCase().trim();
+  const numIsolado = /^\d{1,2}$/.test(msg) ? parseInt(msg) : null;
+
+  // PROFISSIONAL — só se ainda não escolhido
+  if (!context.prof_id) {
+    if (numIsolado && numIsolado >= 1 && numIsolado <= professionals.length) {
+      context.prof_id = professionals[numIsolado - 1].id;
+      console.log(`👤 [fallback] Profissional por número ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
+    } else {
+      for (const p of professionals) {
+        const nome = p.nome.toLowerCase();
+        if (msg.includes(nome) || nome.includes(msg.split(' ')[0])) {
+          context.prof_id = p.id;
+          console.log(`👤 [fallback] Profissional por nome: ${p.nome}`);
+          break;
+        }
+      }
+    }
+  }
+
+  // SERVIÇO — só se ainda não escolhido
+  if (!context.servico_id) {
+    let melhor = null;
+
+    if (context.prof_id && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
+      melhor = services[numIsolado - 1];
+      console.log(`✂️ [fallback] Serviço por número ${numIsolado}: ${melhor.nome}`);
+    }
+
+    if (!melhor) {
+      let melhorLen = 0;
+      for (const s of services) {
+        const nome = s.nome.toLowerCase();
+        if (msg.includes(nome) && nome.length > melhorLen) {
+          melhor = s;
+          melhorLen = nome.length;
+        }
+      }
+    }
+
+    if (!melhor) {
+      if (msg.includes('corte') && msg.includes('barba')) {
+        melhor = services.find(s => /corte e barba/i.test(s.nome));
+      } else if (/\bcorte\b/.test(msg)) {
+        melhor = services.find(s => /corte/i.test(s.nome) && !/barba|sobrancelha/i.test(s.nome))
+              || services.find(s => /corte/i.test(s.nome));
+      } else if (/\bbarba\b/.test(msg)) {
+        melhor = services.find(s => /^barba/i.test(s.nome));
+      }
+    }
+
+    if (melhor) {
+      context.servico_id = melhor.id;
+      console.log(`✂️ [fallback] Serviço detectado: ${melhor.nome}`);
+    }
+  }
+}
+
 function montarContextInfo(context, professionals, services, settings, livres) {
   let info = `\n\nDATA ATUAL: ${new Date().toISOString().split('T')[0]}\n`;
   info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
@@ -382,6 +441,9 @@ async function processarMensagem(phone, userMessage) {
 
   const contextInfo = montarContextInfo(conv.context, professionals, services, settings, livres);
   conv.history.push({ role: 'user', content: userMessage });
+
+  // Fallback deterministico: escaneia mensagem crua por servico/profissional
+  extrairFallback(userMessage, conv.context, professionals, services);
 
   const messages = [{ role: 'system', content: SYSTEM_PROMPT + contextInfo }, ...conv.history];
 
