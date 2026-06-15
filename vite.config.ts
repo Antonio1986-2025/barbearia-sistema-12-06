@@ -25,4 +25,14 @@ export default defineConfig({
     viteReact(),
     tailwindcss(),
   ],
+  // "cloudflare:workers" só existe em runtime no Cloudflare Workers; marcar
+  // como external evita o erro de build do Rollup ao tentar resolvê-lo.
+  build: {
+    rollupOptions: {
+      external: ["cloudflare:workers"],
+    },
+  },
+  ssr: {
+    external: ["cloudflare:workers"],
+  },
 });
