@@ -257,6 +257,16 @@ async function buscarDados() {
   return { professionals: pros.data || [], services: svcs.data || [], settings: settings.data };
 }
 
+async function buscarClienteCadastrado(tel) {
+  const cleanPhone = String(tel).replace(/\D/g, "");
+  const { data } = await supabase
+    .from("clients")
+    .select("nome, visitas, total_gasto")
+    .eq("tel", cleanPhone)
+    .maybeSingle();
+  return data || null;
+}
+
 async function buscarAgendamentosCliente(tel) {
   const cleanPhone = String(tel).replace(/\D/g, "");
   const hoje = hojeBrasilISO();
@@ -616,6 +626,11 @@ function extrairFallback(userMessage, context, professionals, services) {
 
 function montarContextInfo(context, professionals, services, settings, livres, agsCliente) {
   let info = `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
+  if (context._cadastrado) {
+    info += `\nCLIENTE JA CADASTRADO: ${context._cadastrado} (${context._visitas || 0} visita(s) anteriores). Cumprimente-o pelo primeiro nome de forma calorosa e NAO pergunte o nome de novo. Se o agendamento for para ele mesmo, ja use este nome.\n`;
+  } else {
+    info += `\nCLIENTE NOVO: ainda nao ha cadastro para este numero. Pergunte o nome de forma simpatica quando precisar.\n`;
+  }
   info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
   info += `- Nome titular: ${context.nome || '(NÃƒO INFORMADO)'}\n`;
   info += `- Para: ${context.para || '(nÃ£o informado)'}\n`;
@@ -668,6 +683,22 @@ async function processarMensagem(phone, userMessage) {
     conversations.set(phone, conv);
   }
   conv.lastUpdate = Date.now();
+
+  // Consulta o cadastro do cliente (uma vez por conversa) para cumprimentar pelo nome
+  if (!conv._clienteChecado) {
+    conv._clienteChecado = true;
+    try {
+      const cli = await buscarClienteCadastrado(phone);
+      if (cli && cli.nome) {
+        conv.context._cadastrado = cli.nome;
+        conv.context._visitas = cli.visitas || 0;
+        if (!conv.context.nome) conv.context.nome = cli.nome;
+        console.log("[cliente] cadastrado: " + cli.nome + " (" + (cli.visitas || 0) + " visita(s))");
+      } else {
+        console.log("[cliente] sem cadastro para " + phone);
+      }
+    } catch (e) { console.warn("[cliente] aviso lookup:", e.message); }
+  }
 
   const { professionals, services, settings } = await buscarDados();
 
