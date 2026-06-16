@@ -1,6 +1,6 @@
 // Service Worker — Barbearia Status
-// Estratégia: network-first para navegação/HTML, cache-first para assets estáticos.
-const CACHE = 'barbearia-status-v2';
+// Network-first para TUDO (deploys sempre frescos). Cache só como fallback offline.
+const CACHE = 'barbearia-status-v3';
 const ASSETS = ['/agenda', '/login', '/agendar', '/manifest.json', '/icon.svg'];
 
 self.addEventListener('install', (event) => {
@@ -26,26 +26,15 @@ self.addEventListener('fetch', (event) => {
   // Não interceptar chamadas a APIs externas (Supabase, Evolution, etc)
   if (url.origin !== self.location.origin) return;
 
-  const isAsset = url.pathname.startsWith('/assets/') ||
-    /\.(?:js|css|svg|png|jpg|jpeg|woff2?|ttf|ico)$/.test(url.pathname);
-
-  if (isAsset) {
-    // cache-first
-    event.respondWith(
-      caches.match(req).then((cached) =>
-        cached ||
-        fetch(req).then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
-        })
-      )
-    );
-    return;
-  }
-
-  // network-first para navegação/HTML
+  // Network-first: sempre busca a versão mais recente; usa cache só se offline.
   event.respondWith(
-    fetch(req).catch(() => caches.match(req).then((c) => c || caches.match('/agenda')))
+    fetch(req)
+      .then((res) => {
+        // Atualiza o cache em background
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
+        return res;
+      })
+      .catch(() => caches.match(req).then((c) => c || caches.match('/agenda')))
   );
 });
