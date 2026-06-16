@@ -712,6 +712,12 @@ function extrairFallback(userMessage, context, professionals, services, historic
 }
 
 function montarContextInfo(context, professionals, services, settings, livres, agsCliente) {
+  // Adicionar informação de histórico se disponível
+  let infoHistorico = '';
+  if (context._visitas > 0) {
+    infoHistorico = `\n\nHISTÓRICO DO CLIENTE: ${context._visitas} visita(s) anterior(es). Cliente já conhece a barbearia.`;
+  }
+  
   let info = infoHistorico + `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
   if (context._cadastrado) {
     info += `\nCLIENTE JA CADASTRADO: ${context._cadastrado} (${context._visitas || 0} visita(s) anteriores). Cumprimente-o pelo primeiro nome de forma calorosa e NAO pergunte o nome de novo. Se o agendamento for para ele mesmo, ja use este nome.\n`;
