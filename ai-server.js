@@ -775,13 +775,8 @@ async function processarMensagem(phone, userMessage) {
   const assistantMessage = completion.choices[0].message;
   conv.history.push(assistantMessage);
 
-  const _ctxC = conv.context;
-  const _temTudo = !!(_ctxC.nome && _ctxC.prof_id && _ctxC.servico_id && _ctxC.data && _ctxC.hora);
+  // Checa se cliente afirmou (antes de processar tools)
   const _afirma = /^(sim|isso|isso mesmo|pode|pode confirmar|pode sim|pode marcar|pode agendar|confirma|confirmar|confirmado|claro|perfeito|ok|okay|fechado|fechou|beleza|positivo|com certeza|aham|uhum)\b/i.test(String(userMessage).trim());
-  let deveConfirmar = _temTudo && _afirma && !conv._modoGestao;
-  console.log(`[DEBUG CONF] _temTudo=${_temTudo} _afirma=${_afirma} _modoGestao=${!!conv._modoGestao}`);
-  console.log(`[DEBUG CTX] nome=${!!_ctxC.nome} prof=${_ctxC.prof_id} svc=${_ctxC.servico_id} data=${_ctxC.data} hora=${_ctxC.hora}`);
-  if (deveConfirmar) console.log("[confirmacao] deterministica: cliente confirmou e dados completos");
   const houveToolCalls = !!(assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0);
   if (houveToolCalls) {
 
@@ -870,6 +865,14 @@ async function processarMensagem(phone, userMessage) {
       hora: conv.context.hora || 'âŒ'
     });
   }
+
+  // CONFIRMACAO DETERMINISTICA: Agora que tools processaram, checa se deve confirmar
+  const _ctxC = conv.context;
+  const _temTudo = !!(_ctxC.nome && _ctxC.prof_id && _ctxC.servico_id && _ctxC.data && _ctxC.hora);
+  let deveConfirmar = _temTudo && _afirma && !conv._modoGestao;
+  console.log(`[DEBUG CONF FINAL] _temTudo=${_temTudo} _afirma=${_afirma}`);
+  console.log(`[DEBUG CTX FINAL] nome=${!!_ctxC.nome} prof=${_ctxC.prof_id} svc=${_ctxC.servico_id} data=${_ctxC.data} hora=${_ctxC.hora}`);
+  if (deveConfirmar) console.log("[confirmacao] DETERMINISTICA ATIVADA: criando agendamento");
 
     if (deveConfirmar) {
       try {
