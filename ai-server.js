@@ -164,6 +164,7 @@ async function sendWhatsApp(phone, message) {
     console.error('âŒ Erro ao enviar WhatsApp:', error.response?.data || error.message);
     throw error;
   }
+}
 
 /**
  * Mostra o status "digitando..." no WhatsApp do cliente (presenÃ§a).
@@ -186,7 +187,6 @@ async function enviarDigitando(phone, durationMs = 1500) {
  */
 function pausa(ms) {
   return new Promise((r) => setTimeout(r, ms));
-}
 }
 
 async function buscarDados() {
