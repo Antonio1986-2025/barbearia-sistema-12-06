@@ -378,7 +378,7 @@ async function processarExtracao(args, context, professionals, services) {
       console.log(`âš ï¸ ServiÃ§o nÃ£o encontrado: "${args.servico_nome}"`);
     }
   }
-  if (args.data && /^\d{4}-\d{2}-\d{2}$/.test(args.data)) {
+  if (args.data && !context.data && /^\d{4}-\d{2}-\d{2}$/.test(args.data)) {
     updates.data = args.data;
     console.log(`ðŸ“… Data: ${args.data}`);
   }
@@ -394,9 +394,67 @@ async function processarExtracao(args, context, professionals, services) {
   return updates;
 }
 
+// Data de hoje no fuso de Coxim/MS (America/Campo_Grande, UTC-4)
+function hojeBrasilISO() {
+  const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Campo_Grande', year: 'numeric', month: '2-digit', day: '2-digit' });
+  return fmt.format(new Date()); // YYYY-MM-DD
+}
+
+// Converte termos de data (hoje, amanha, dia da semana, dd/mm, "dia X") em YYYY-MM-DD.
+// Retorna null se nao reconhecer. NUNCA interpreta numero isolado (esse e horario/opcao).
+function parseDataRelativa(msg) {
+  const hoje = hojeBrasilISO();
+  const [y, m, d] = hoje.split('-').map(Number);
+  const base = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const iso = (dt) => dt.toISOString().split('T')[0];
+  const addDias = (n) => { const dt = new Date(base); dt.setUTCDate(dt.getUTCDate() + n); return iso(dt); };
+
+  if (/depois de amanh[aã]/.test(msg)) return addDias(2);
+  if (/\bamanh[aã]\b/.test(msg)) return addDias(1);
+  if (/\bhoje\b/.test(msg)) return addDias(0);
+
+  const dias = { domingo: 0, segunda: 1, "terca": 2, "terça": 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6, "sábado": 6 };
+  for (const nome of Object.keys(dias)) {
+    if (msg.includes(nome)) {
+      const wd = dias[nome];
+      const baseWd = base.getUTCDay();
+      let add = (wd - baseWd + 7) % 7;
+      if (add === 0) add = 7; // proxima ocorrencia
+      return addDias(add);
+    }
+  }
+
+  const dm = msg.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+  if (dm) {
+    const dd = parseInt(dm[1]); const mm = parseInt(dm[2]);
+    if (dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12) {
+      return `${y}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+
+  const diaM = msg.match(/\bdia\s+(\d{1,2})\b/);
+  if (diaM) {
+    const dd = parseInt(diaM[1]);
+    if (dd >= 1 && dd <= 31) {
+      let mm = m, yy = y;
+      if (dd < d) { mm = m === 12 ? 1 : m + 1; if (m === 12) yy = y + 1; }
+      return `${yy}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`;
+    }
+  }
+  return null;
+}
 function extrairFallback(userMessage, context, professionals, services) {
   const msg = userMessage.toLowerCase().trim();
   const numIsolado = /^\d{1,2}$/.test(msg) ? parseInt(msg) : null;
+
+  // DATA (deterministica, fuso Brasil) - so se ainda nao definida
+  if (!context.data) {
+    const dataParse = parseDataRelativa(msg);
+    if (dataParse) {
+      context.data = dataParse;
+      console.log(`[fallback] Data detectada: ${context.data}`);
+    }
+  }
 
   // Snapshot: profissional ja estava definido ANTES desta mensagem?
   // Evita que um unico numero (ex: "2") vire profissional E servico juntos.
@@ -460,7 +518,7 @@ function extrairFallback(userMessage, context, professionals, services) {
 }
 
 function montarContextInfo(context, professionals, services, settings, livres) {
-  let info = `\n\nDATA ATUAL: ${new Date().toISOString().split('T')[0]}\n`;
+  let info = `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
   info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
   info += `- Nome titular: ${context.nome || '(NÃƒO INFORMADO)'}\n`;
   info += `- Para: ${context.para || '(nÃ£o informado)'}\n`;
