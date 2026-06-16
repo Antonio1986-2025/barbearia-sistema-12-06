@@ -270,6 +270,34 @@ async function buscarDados() {
   return { professionals: pros.data || [], services: svcs.data || [], settings: settings.data };
 }
 
+/**
+ * Busca histórico de agendamentos do cliente
+ */
+async function buscarHistoricoCliente(telefone) {
+  const cleanPhone = String(telefone).replace(/\D/g, '');
+  
+  const { data, error } = await supabase
+    .from('appointments')
+    .select('cliente, servico, prof_id, data, hora, status')
+    .eq('tel', cleanPhone)
+    .order('data', { ascending: false })
+    .limit(5);
+  
+  if (error) {
+    console.error('❌ Erro ao buscar histórico:', error);
+    return { agendamentos: [], totalVisitas: 0 };
+  }
+  
+  const total = data?.length || 0;
+  console.log(`[historico] Cliente tem ${total} agendamento(s) anterior(es)`);
+  
+  return {
+    agendamentos: data || [],
+    totalVisitas: total
+  };
+}
+
+
 async function buscarClienteCadastrado(tel) {
   const cleanPhone = String(tel).replace(/\D/g, "");
   const { data } = await supabase
@@ -280,23 +308,6 @@ async function buscarClienteCadastrado(tel) {
   return data || null;
 }
 
-async function buscarHistoricoCliente(tel) {
-  const cleanPhone = String(tel).replace(/\D/g, "");
-  const { data } = await supabase
-    .from("appointments")
-    .select("servico, prof_id, data")
-    .eq("tel", cleanPhone)
-    .eq("status", "agendado")
-    .order("data", { ascending: false })
-    .limit(5);
-  if (!data || data.length === 0) return null;
-  // Analisa padroes
-  const servicos = data.map(a => a.servico);
-  const profs = data.map(a => a.prof_id);
-  const servicoMaisComum = servicos.sort((a,b) => servicos.filter(v => v===a).length - servicos.filter(v => v===b).length).pop();
-  const profMaisComum = profs.sort((a,b) => profs.filter(v => v===a).length - profs.filter(v => v===b).length).pop();
-  return { total: data.length, servicoPreferido: servicoMaisComum, profissionalPreferido: profMaisComum, ultimo: data[0] };
-}
 
 async function buscarAgendamentosCliente(tel) {
   const cleanPhone = String(tel).replace(/\D/g, "");
@@ -517,6 +528,7 @@ async function processarExtracao(args, context, professionals, services) {
     const pro = encontrarProfissional(args.profissional_nome, professionals);
     if (pro) {
       updates.prof_id = pro.id;
+      context._iaExtraiuProf = true;
       console.log(`ðŸ‘¤ Profissional encontrado: ${pro.nome} (id: ${pro.id})`);
     } else {
       console.log(`âš ï¸ Profissional nÃ£o encontrado: "${args.profissional_nome}"`);
@@ -526,6 +538,7 @@ async function processarExtracao(args, context, professionals, services) {
     const svc = encontrarServico(args.servico_nome, services);
     if (svc) {
       updates.servico_id = svc.id;
+      context._iaExtraiuSvc = true;
       console.log(`âœ‚ï¸ ServiÃ§o encontrado: ${svc.nome}`);
     } else {
       console.log(`âš ï¸ ServiÃ§o nÃ£o encontrado: "${args.servico_nome}"`);
@@ -596,51 +609,57 @@ function parseDataRelativa(msg) {
   }
   return null;
 }
-function extrairFallback(userMessage, context, professionals, services) {
+/**
+ * Fallback determinístico: escaneia a mensagem crua por serviço/profissional
+ * caso a IA não tenha extraído via function calling.
+ * Atualiza o context diretamente.
+ * 
+ * IMPORTANTE: Só roda se IA não extraiu os dados
+ */
+function extrairFallback(userMessage, context, professionals, services, historico = null) {
   const msg = userMessage.toLowerCase().trim();
   const numIsolado = /^\d{1,2}$/.test(msg) ? parseInt(msg) : null;
 
-  // DATA (deterministica, fuso Brasil) - so se ainda nao definida
-  if (!context.data) {
-    const dataParse = parseDataRelativa(msg);
-    if (dataParse) {
-      context.data = dataParse;
-      console.log(`[fallback] Data detectada: ${context.data}`);
-    }
-  }
-
-  // Snapshot: profissional ja estava definido ANTES desta mensagem?
-  // Evita que um unico numero (ex: "2") vire profissional E servico juntos.
-  const profJaEstava = !!context.prof_id;
-
-  // PROFISSIONAL - so se ainda nao escolhido
-  if (!context.prof_id) {
+  // PROFISSIONAL — só se ainda não escolhido E IA não extraiu
+  if (!context.prof_id && !context._iaExtraiuProf) {
     if (numIsolado && numIsolado >= 1 && numIsolado <= professionals.length) {
       context.prof_id = professionals[numIsolado - 1].id;
-      console.log(`[fallback] Profissional por numero ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
+      console.log(`👤 [fallback] Profissional por número ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
     } else {
       for (const p of professionals) {
         const nome = p.nome.toLowerCase();
         if (msg.includes(nome) || nome.includes(msg.split(' ')[0])) {
           context.prof_id = p.id;
-          console.log(`[fallback] Profissional por nome: ${p.nome}`);
+          console.log(`👤 [fallback] Profissional por nome: ${p.nome}`);
           break;
         }
       }
     }
   }
 
-  // SERVICO - so se ainda nao escolhido
-  if (!context.servico_id) {
+  // SERVIÇO — só se ainda não escolhido E IA não extraiu
+  if (!context.servico_id && !context._iaExtraiuSvc) {
     let melhor = null;
+    let razao = '';
 
-    // Numero como indice de servico SOMENTE se o profissional ja estava
-    // escolhido ANTES desta mensagem (senao o numero e do profissional).
-    if (profJaEstava && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
+    // DETECÇÃO INTELIGENTE DE GÊNERO
+    const temMasculino = /\b(masculino|homem|rapaz|menino|garoto|pai|filho)\b/i.test(msg);
+    const temFeminino = /\b(feminino|mulher|moça|menina|garota|mãe|filha|esposa)\b/i.test(msg);
+    
+    // Histórico: se cliente tem agendamentos masculinos anteriores
+    const historicoMasculino = historico?.agendamentos?.some(a => 
+      /corte masculino|corte simples/i.test(a.servico)
+    );
+    
+    console.log(`[detecção] masculino=${temMasculino} feminino=${temFeminino} histórico_masc=${historicoMasculino}`);
+
+    // Se profissional JÁ escolhido e veio um número isolado, trata como índice de serviço
+    if (context.prof_id && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
       melhor = services[numIsolado - 1];
-      console.log(`[fallback] Servico por numero ${numIsolado}: ${melhor.nome}`);
+      razao = `número ${numIsolado}`;
     }
 
+    // Por nome completo do serviço presente na mensagem
     if (!melhor) {
       let melhorLen = 0;
       for (const s of services) {
@@ -648,37 +667,52 @@ function extrairFallback(userMessage, context, professionals, services) {
         if (msg.includes(nome) && nome.length > melhorLen) {
           melhor = s;
           melhorLen = nome.length;
+          razao = 'nome completo';
         }
       }
     }
 
-    if (!melhor && !numIsolado) {
+    // Por palavra-chave + detecção de gênero
+    if (!melhor) {
       if (msg.includes('corte') && msg.includes('barba')) {
         melhor = services.find(s => /corte e barba/i.test(s.nome));
+        razao = 'corte+barba';
       } else if (/\bcorte\b/.test(msg)) {
-        // Prioriza masculino se cliente tem historico masculino OU se nao especificou
-        const temHistMasc = context._historico?.servicoPreferido?.toLowerCase().includes("masculino");
-        if (temHistMasc || !msg.includes("feminino")) {
-          melhor = services.find(s => /corte masculino/i.test(s.nome))
-                || services.find(s => /corte/i.test(s.nome) && /masculino/i.test(s.nome))
-                || services.find(s => /corte/i.test(s.nome) && !/feminino/i.test(s.nome));
+        // PRIORIZA MASCULINO se:
+        // - Cliente disse explicitamente "masculino" OU
+        // - Cliente tem histórico masculino OU
+        // - NÃO disse "feminino"
+        if (temMasculino || historicoMasculino || !temFeminino) {
+          melhor = services.find(s => /corte masculino|corte simples/i.test(s.nome));
+          razao = temMasculino ? 'palavra masculino' : 
+                  historicoMasculino ? 'histórico masculino' : 
+                  'padrão masculino';
         } else {
-          melhor = services.find(s => /corte/i.test(s.nome));
+          melhor = services.find(s => /corte feminino/i.test(s.nome));
+          razao = 'palavra feminino';
+        }
+        
+        // Fallback: qualquer corte
+        if (!melhor) {
+          melhor = services.find(s => /corte/i.test(s.nome) && !/barba|sobrancelha/i.test(s.nome))
+                || services.find(s => /corte/i.test(s.nome));
+          razao = 'corte genérico';
         }
       } else if (/\bbarba\b/.test(msg)) {
         melhor = services.find(s => /^barba/i.test(s.nome));
+        razao = 'palavra barba';
       }
     }
 
     if (melhor) {
       context.servico_id = melhor.id;
-      console.log(`[fallback] Servico detectado: ${melhor.nome}`);
+      console.log(`✂️ [fallback] Serviço: ${melhor.nome} (razão: ${razao})`);
     }
   }
 }
 
 function montarContextInfo(context, professionals, services, settings, livres, agsCliente) {
-  let info = `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
+  let info = infoHistorico + `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
   if (context._cadastrado) {
     info += `\nCLIENTE JA CADASTRADO: ${context._cadastrado} (${context._visitas || 0} visita(s) anteriores). Cumprimente-o pelo primeiro nome de forma calorosa e NAO pergunte o nome de novo. Se o agendamento for para ele mesmo, ja use este nome.\n`;
     if (context._historico) {
@@ -764,6 +798,15 @@ async function processarMensagem(phone, userMessage) {
 
   const { professionals, services, settings } = await buscarDados();
 
+  // Buscar histórico do cliente
+  const historico = await buscarHistoricoCliente(phone);
+  if (!conv.context._cadastrado && historico.totalVisitas > 0) {
+    const ultimo = historico.agendamentos[0];
+    conv.context._cadastrado = ultimo.cliente;
+    conv.context._visitas = historico.totalVisitas;
+    console.log(`[cliente] cadastrado: ${ultimo.cliente} (${historico.totalVisitas} visita(s))`);
+  }
+
   let livres = null;
   if (conv.context.prof_id && conv.context.data && settings) {
     const slots = generateSlots(settings.horario_inicio || '08:00', settings.horario_fim || '20:00', settings.slot_minutos || 30);
@@ -782,7 +825,7 @@ async function processarMensagem(phone, userMessage) {
   // Fallback deterministico: escaneia mensagem crua por servico/profissional
   // MAS: so roda se cliente NAO escolheu por numero (evita sobrescrever escolha correta)
   if (!conv.context.servico_id && !conv.context.prof_id) {
-    extrairFallback(userMessage, conv.context, professionals, services);
+    extrairFallback(userMessage, conv.context, professionals, services, historico);
   }
 
   const messages = [{ role: 'system', content: SYSTEM_PROMPT + contextInfo }, ...conv.history];
