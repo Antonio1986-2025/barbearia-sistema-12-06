@@ -444,6 +444,18 @@ async function criarAgendamento(context) {
   console.log(`ðŸ“… Agendamento criado: ${appt.id}`);
 
   try {
+    // Verifica se ja existe comanda aberta para este cliente (evita duplicata)
+    const { data: comandaExistente } = await supabase
+      .from('commands')
+      .select('id, numero')
+      .eq('cliente_nome', clienteFinal)
+      .eq('status', 'aberta')
+      .gte('abertura', new Date(Date.now() - 10000).toISOString())
+      .maybeSingle();
+    if (comandaExistente) {
+      console.log(`♻️ Comanda #${comandaExistente.numero} ja existe para ${clienteFinal} - reutilizando`);
+      return { appt, pro, svc };
+    }
     const { data: lastCmd } = await supabase.from('commands').select('numero').order('numero', { ascending: false }).limit(1).maybeSingle();
     const nextNum = (lastCmd?.numero || 0) + 1;
     const { data: cmd, error: cmdError } = await supabase.from('commands').insert({
