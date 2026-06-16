@@ -150,7 +150,7 @@ function AgendaPage() {
       </div>
 
       <div className="bs-card overflow-auto rounded-xl">
-        <div className="hidden md:block min-w-[800px] grid" style={{
+        <div className="hidden md:grid min-w-[800px]" style={{
           gridTemplateColumns: `68px repeat(${pros.length}, 1fr)`,
         }}>
           <div className="sticky top-0 z-10 bg-[#1a1408] border-b border-amber-800/40 p-2.5 text-[11px] font-bold text-amber-500/60 uppercase tracking-[0.15em] flex items-center justify-center">Hora</div>
