@@ -262,7 +262,7 @@ async function buscarAgendamentosCliente(tel) {
   const hoje = hojeBrasilISO();
   const { data } = await supabase
     .from("appointments")
-    .select("id, data, hora, servico, prof_id, status, valor")
+    .select("id, data, hora, servico, prof_id, status, valor, cliente")
     .eq("tel", cleanPhone)
     .gte("data", hoje)
     .neq("status", "cancelado")
@@ -274,6 +274,22 @@ async function buscarAgendamentosCliente(tel) {
 async function cancelarAgendamentoDB(apptId) {
   const { error } = await supabase.from("appointments").update({ status: "cancelado" }).eq("id", apptId);
   if (error) throw new Error("Erro ao cancelar: " + error.message);
+  return true;
+}
+
+async function cancelarComandaDoCliente(clienteNome) {
+  if (!clienteNome) return false;
+  const { data: cmd } = await supabase
+    .from("commands")
+    .select("id, numero")
+    .eq("cliente_nome", clienteNome)
+    .eq("status", "aberta")
+    .order("abertura", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!cmd) return false;
+  await supabase.from("commands").update({ status: "cancelada" }).eq("id", cmd.id);
+  console.log("[cancelar] comanda #" + cmd.numero + " cancelada (cliente: " + clienteNome + ")");
   return true;
 }
 
@@ -740,6 +756,7 @@ async function processarMensagem(phone, userMessage) {
         } else {
           try {
             await cancelarAgendamentoDB(alvo.id);
+            try { await cancelarComandaDoCliente(alvo.cliente); } catch (ce) { console.warn("[cancelar] aviso comanda:", ce.message); }
             console.log(`[cancelar] ${alvo.id} cancelado`);
             conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: true, cancelado: rotuloAgendamento(alvo, professionals) }) });
           } catch (e) {
@@ -759,6 +776,10 @@ async function processarMensagem(phone, userMessage) {
           conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: ags.length === 0 ? "sem_agendamentos" : "precisa_identificar", agendamentos: ags.map(a => rotuloAgendamento(a, professionals)) }) });
         } else if (!novaData || !novaHora) {
           conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: "falta_nova_data_hora" }) });
+        } else if ((await buscarOcupados(alvo.prof_id, novaData)).includes(novaHora) && !(alvo.data === novaData && alvo.hora.slice(0,5) === novaHora)) {
+          const ocupRemarc = await buscarOcupados(alvo.prof_id, novaData);
+          const livresRemarc = generateSlots(settings?.horario_inicio || "08:00", settings?.horario_fim || "20:00", settings?.slot_minutos || 30).filter(h => !ocupRemarc.includes(h));
+          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: "horario_ocupado", horarios_livres: livresRemarc }) });
         } else {
           try {
             await remarcarAgendamentoDB(alvo.id, novaData, novaHora);
