@@ -104,11 +104,19 @@ DADOS QUE VOCE PRECISA COLETAR (de forma fluida):
 
 ORDEM SUGERIDA: nome -> para quem -> profissional -> servico -> data -> horario.
 
-AO LISTAR OPCOES:
-- Mostre profissionais numerados (1, 2, 3...) e peca o numero.
-- DEPOIS que o cliente escolher o profissional, mostre os servicos numerados e peca o numero.
-- Deixe claro o que cada numero representa para nao confundir.
-- Ao receber a escolha, repita em texto o que foi escolhido (ex: "Otimo, Diogo entao!").
+AO LISTAR OPCOES (capriche no visual, tem que ficar bonito e limpo no WhatsApp):
+- Profissionais: mostre SOMENTE o nome, numerado, um por linha. NADA de categoria, descricao ou texto extra. Use um titulo em *negrito*. Exemplo:
+*Nossos barbeiros:*
+1. Junio
+2. Diogo
+3. Felipe
+- Servicos: SO depois que o cliente escolher o profissional. Numere e mostre nome, duracao e preco de forma limpa, com titulo em *negrito*. Exemplo:
+*Nossos servicos:*
+1. Corte Masculino - 30min - R$ 45,00
+2. Barba - 20min - R$ 25,00
+- Sempre diga que e so mandar o numero da opcao desejada.
+- Ao receber a escolha, confirme em texto de forma calorosa (ex: "Otimo, Diogo entao!").
+- Mantenha as mensagens curtas e organizadas (uma quebra de linha entre os itens).
 
 CANCELAMENTO E REMARCACAO (troca):
 - O cliente pode CANCELAR ou REMARCAR um agendamento que ja tem.
@@ -650,7 +658,7 @@ function montarContextInfo(context, professionals, services, settings, livres, a
   info += `- Data: ${context.data || '(nÃ£o informada)'}\n`;
   info += `- HorÃ¡rio: ${context.hora || '(nÃ£o informado)'}\n`;
   info += `\nBARBEIROS DISPONÃVEIS:\n`;
-  professionals.forEach((p, i) => info += `${i + 1}. ${p.nome} (${p.categoria})\n`);
+  professionals.forEach((p, i) => info += `${i + 1}. ${p.nome}\n`);
   info += `\nSERVIÃ‡OS DISPONÃVEIS:\n`;
   services.forEach((s, i) => info += `${i + 1}. ${s.nome} - ${s.duracao}min - R$ ${Number(s.preco).toFixed(2)}\n`);
   if (livres && livres.length > 0) {
@@ -745,8 +753,13 @@ async function processarMensagem(phone, userMessage) {
   const assistantMessage = completion.choices[0].message;
   conv.history.push(assistantMessage);
 
-  if (assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0) {
-    let deveConfirmar = false;
+  const _ctxC = conv.context;
+  const _temTudo = !!(_ctxC.nome && _ctxC.prof_id && _ctxC.servico_id && _ctxC.data && _ctxC.hora);
+  const _afirma = /^(sim|isso|isso mesmo|pode|pode confirmar|pode sim|pode marcar|pode agendar|confirma|confirmar|confirmado|claro|perfeito|ok|okay|fechado|fechou|beleza|positivo|com certeza|aham|uhum)\b/i.test(String(userMessage).trim());
+  let deveConfirmar = _temTudo && _afirma && !conv._modoGestao;
+  if (deveConfirmar) console.log("[confirmacao] deterministica: cliente confirmou e dados completos");
+  const houveToolCalls = !!(assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0);
+  if (houveToolCalls) {
 
     for (const toolCall of assistantMessage.tool_calls) {
       const funcName = toolCall.function.name;
@@ -832,6 +845,7 @@ async function processarMensagem(phone, userMessage) {
       data: conv.context.data || 'âŒ',
       hora: conv.context.hora || 'âŒ'
     });
+  }
 
     if (deveConfirmar) {
       try {
@@ -856,6 +870,7 @@ async function processarMensagem(phone, userMessage) {
       }
     }
 
+  if (houveToolCalls) {
     let livresAtualizados = null;
     if (conv.context.prof_id && conv.context.data && settings) {
       const slots = generateSlots(settings.horario_inicio || '08:00', settings.horario_fim || '20:00', settings.slot_minutos || 30);
