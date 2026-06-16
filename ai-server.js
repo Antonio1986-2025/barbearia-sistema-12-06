@@ -182,8 +182,9 @@ const FUNCTIONS = [
       parameters: {
         type: "object",
         properties: {
-          data: { type: "string", description: "Data do agendamento a cancelar (YYYY-MM-DD), se houver mais de um" },
-          hora: { type: "string", description: "Hora do agendamento a cancelar (HH:MM), se houver mais de um" }
+          indice: { type: "integer", description: "Numero do agendamento na lista mostrada ao cliente (1, 2, 3...)" },
+          data: { type: "string", description: "Data do agendamento a cancelar (YYYY-MM-DD), alternativa ao indice" },
+          hora: { type: "string", description: "Hora do agendamento a cancelar (HH:MM), alternativa ao indice" }
         }
       }
     }
@@ -198,8 +199,9 @@ const FUNCTIONS = [
         properties: {
           nova_data: { type: "string", description: "Nova data YYYY-MM-DD" },
           nova_hora: { type: "string", description: "Novo horario HH:MM" },
-          data: { type: "string", description: "Data atual do agendamento (YYYY-MM-DD), se houver mais de um" },
-          hora: { type: "string", description: "Hora atual do agendamento (HH:MM), se houver mais de um" }
+          indice: { type: "integer", description: "Numero do agendamento na lista mostrada ao cliente (1, 2, 3...)" },
+          data: { type: "string", description: "Data atual do agendamento (YYYY-MM-DD), alternativa ao indice" },
+          hora: { type: "string", description: "Hora atual do agendamento (HH:MM), alternativa ao indice" }
         }
       }
     }
@@ -596,7 +598,7 @@ function extrairFallback(userMessage, context, professionals, services) {
   }
 }
 
-function montarContextInfo(context, professionals, services, settings, livres) {
+function montarContextInfo(context, professionals, services, settings, livres, agsCliente) {
   let info = `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
   info += `\nCONTEXTO ATUAL DO AGENDAMENTO:\n`;
   info += `- Nome titular: ${context.nome || '(NÃƒO INFORMADO)'}\n`;
@@ -624,6 +626,16 @@ function montarContextInfo(context, professionals, services, settings, livres) {
     info += `\nHORÃRIOS LIVRES PARA ${context.data}:\n`;
     livres.forEach((h, i) => info += `${i + 1}. ${h}\n`);
   }
+  if (agsCliente && agsCliente.length > 0) {
+    info += `\nSEUS AGENDAMENTOS ATUAIS (para cancelar/remarcar, o cliente escolhe pelo numero):\n`;
+    agsCliente.forEach((a, i) => {
+      const p = professionals.find(x => x.id === a.prof_id);
+      const df = new Date(a.data + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+      info += `${i + 1}. ${df} as ${a.hora.slice(0,5)} - ${a.servico} com ${p ? p.nome : "?"}\n`;
+    });
+  } else if (agsCliente && agsCliente.length === 0) {
+    info += `\nO cliente NAO possui agendamentos futuros.\n`;
+  }
   return info;
 }
 
@@ -650,7 +662,12 @@ async function processarMensagem(phone, userMessage) {
     livres = slots.filter(s => !ocupados.includes(s));
   }
 
-  const contextInfo = montarContextInfo(conv.context, professionals, services, settings, livres);
+  // Detecta intencao de cancelar/remarcar e ja busca os agendamentos do cliente no Supabase
+  if (/cancel|remarc|trocar|desmarc|adiar|mudar/i.test(userMessage)) conv._modoGestao = true;
+  let agsCliente = conv._modoGestao ? await buscarAgendamentosCliente(phone) : null;
+  if (agsCliente) { conv.context._ags = agsCliente; console.log(`[gestao] ${phone}: ${agsCliente.length} agendamento(s) carregado(s)`); }
+
+  const contextInfo = montarContextInfo(conv.context, professionals, services, settings, livres, agsCliente);
   conv.history.push({ role: 'user', content: userMessage });
 
   // Fallback deterministico: escaneia mensagem crua por servico/profissional
@@ -715,10 +732,11 @@ async function processarMensagem(phone, userMessage) {
       } else if (funcName === 'cancelarAgendamento') {
         const ags = await buscarAgendamentosCliente(phone);
         let alvo = null;
-        if (ags.length === 1) alvo = ags[0];
+        if (args.indice && args.indice >= 1 && args.indice <= ags.length) alvo = ags[args.indice - 1];
+        else if (ags.length === 1) alvo = ags[0];
         else if (ags.length > 1) alvo = ags.find(a => (!args.data || a.data === args.data) && (!args.hora || a.hora.slice(0,5) === String(args.hora||"").slice(0,5)));
         if (!alvo) {
-          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: ags.length === 0 ? "sem_agendamentos" : "precisa_identificar", agendamentos: ags.map(a => rotuloAgendamento(a, professionals)) }) });
+          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: ags.length === 0 ? "sem_agendamentos" : "precisa_identificar", agendamentos: ags.map((a,i)=>`${i+1}. ${rotuloAgendamento(a, professionals)}`) }) });
         } else {
           try {
             await cancelarAgendamentoDB(alvo.id);
@@ -731,7 +749,8 @@ async function processarMensagem(phone, userMessage) {
       } else if (funcName === 'remarcarAgendamento') {
         const ags = await buscarAgendamentosCliente(phone);
         let alvo = null;
-        if (ags.length === 1) alvo = ags[0];
+        if (args.indice && args.indice >= 1 && args.indice <= ags.length) alvo = ags[args.indice - 1];
+        else if (ags.length === 1) alvo = ags[0];
         else if (ags.length > 1) alvo = ags.find(a => (!args.data || a.data === args.data) && (!args.hora || a.hora.slice(0,5) === String(args.hora||"").slice(0,5)));
         let novaData = (args.nova_data && /^\d{4}-\d{2}-\d{2}$/.test(args.nova_data)) ? args.nova_data : parseDataRelativa(String(args.nova_data||"").toLowerCase());
         let novaHora = null;
@@ -791,7 +810,7 @@ async function processarMensagem(phone, userMessage) {
       const ocupados = await buscarOcupados(conv.context.prof_id, conv.context.data);
       livresAtualizados = slots.filter(s => !ocupados.includes(s));
     }
-    const contextInfoAtualizado = montarContextInfo(conv.context, professionals, services, settings, livresAtualizados);
+    const contextInfoAtualizado = montarContextInfo(conv.context, professionals, services, settings, livresAtualizados, conv.context._ags || null);
 
     try {
       const followUp = await openai.chat.completions.create({
