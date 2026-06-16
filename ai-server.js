@@ -110,6 +110,15 @@ AO LISTAR OPCOES:
 - Deixe claro o que cada numero representa para nao confundir.
 - Ao receber a escolha, repita em texto o que foi escolhido (ex: "Otimo, Diogo entao!").
 
+CANCELAMENTO E REMARCACAO (troca):
+- O cliente pode CANCELAR ou REMARCAR um agendamento que ja tem.
+- Primeiro chame "consultarMeusAgendamentos" para ver os agendamentos dele.
+- Se ele nao tiver nenhum, avise com gentileza.
+- Se tiver mais de um, mostre a lista (data, hora, servico, profissional) e pergunte qual.
+- SEMPRE confirme com o cliente antes de cancelar ou remarcar.
+- Para cancelar, chame "cancelarAgendamento". Para remarcar, chame "remarcarAgendamento" com nova_data e nova_hora.
+- Apos cancelar/remarcar, confirme de forma calorosa o que foi feito.
+
 FERRAMENTAS (uso interno, o cliente nao ve):
 - Chame "extrairDadosAgendamento" SEMPRE que o cliente fornecer qualquer dado novo (mesmo varios de uma vez).
 - Chame "confirmarAgendamento" SOMENTE depois de recapitular TUDO e o cliente confirmar com "sim/pode/confirma".
@@ -154,6 +163,44 @@ const FUNCTIONS = [
           confirmado: { type: "boolean", description: "Se cliente confirmou explicitamente" }
         },
         required: ["confirmado"]
+      }
+    }
+  }
+  ,{
+    type: "function",
+    function: {
+      name: "consultarMeusAgendamentos",
+      description: "Lista os agendamentos futuros do cliente (deste telefone). Use quando o cliente perguntar sobre seus horarios marcados, ou ANTES de cancelar/remarcar.",
+      parameters: { type: "object", properties: {} }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "cancelarAgendamento",
+      description: "Cancela um agendamento do cliente. Chame apos o cliente confirmar o cancelamento. Se houver mais de um, passe data e/ou hora para identificar qual.",
+      parameters: {
+        type: "object",
+        properties: {
+          data: { type: "string", description: "Data do agendamento a cancelar (YYYY-MM-DD), se houver mais de um" },
+          hora: { type: "string", description: "Hora do agendamento a cancelar (HH:MM), se houver mais de um" }
+        }
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "remarcarAgendamento",
+      description: "Remarca (troca) um agendamento para nova data/horario. Chame apos o cliente confirmar. nova_data e nova_hora sao obrigatorios.",
+      parameters: {
+        type: "object",
+        properties: {
+          nova_data: { type: "string", description: "Nova data YYYY-MM-DD" },
+          nova_hora: { type: "string", description: "Novo horario HH:MM" },
+          data: { type: "string", description: "Data atual do agendamento (YYYY-MM-DD), se houver mais de um" },
+          hora: { type: "string", description: "Hora atual do agendamento (HH:MM), se houver mais de um" }
+        }
       }
     }
   }
@@ -206,6 +253,38 @@ async function buscarDados() {
   if (svcs.error) console.error('âŒ Erro ao buscar serviÃ§os:', svcs.error);
   console.log(`ðŸ“Š DB: professionals=${pros.data?.length || 0} services=${svcs.data?.length || 0}`);
   return { professionals: pros.data || [], services: svcs.data || [], settings: settings.data };
+}
+
+async function buscarAgendamentosCliente(tel) {
+  const cleanPhone = String(tel).replace(/\D/g, "");
+  const hoje = hojeBrasilISO();
+  const { data } = await supabase
+    .from("appointments")
+    .select("id, data, hora, servico, prof_id, status, valor")
+    .eq("tel", cleanPhone)
+    .gte("data", hoje)
+    .neq("status", "cancelado")
+    .order("data", { ascending: true })
+    .order("hora", { ascending: true });
+  return data || [];
+}
+
+async function cancelarAgendamentoDB(apptId) {
+  const { error } = await supabase.from("appointments").update({ status: "cancelado" }).eq("id", apptId);
+  if (error) throw new Error("Erro ao cancelar: " + error.message);
+  return true;
+}
+
+async function remarcarAgendamentoDB(apptId, novaData, novaHora) {
+  const { error } = await supabase.from("appointments").update({ data: novaData, hora: novaHora }).eq("id", apptId);
+  if (error) throw new Error("Erro ao remarcar: " + error.message);
+  return true;
+}
+
+function rotuloAgendamento(a, professionals) {
+  const p = professionals.find(x => x.id === a.prof_id);
+  const dataFmt = new Date(a.data + "T00:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  return `${dataFmt} as ${a.hora.slice(0, 5)} - ${a.servico} com ${p ? p.nome : "profissional"}`;
 }
 
 function generateSlots(inicio, fim, intervalo) {
@@ -628,6 +707,48 @@ async function processarMensagem(phone, userMessage) {
           tool_call_id: toolCall.id,
           content: JSON.stringify({ success: args.confirmado, message: args.confirmado ? 'Confirmado' : 'NÃ£o confirmado' })
         });
+      } else if (funcName === 'consultarMeusAgendamentos') {
+        const ags = await buscarAgendamentosCliente(phone);
+        const lista = ags.map(a => rotuloAgendamento(a, professionals));
+        console.log(`[consultar] ${phone}: ${ags.length} agendamento(s)`);
+        conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: true, total: ags.length, agendamentos: lista }) });
+      } else if (funcName === 'cancelarAgendamento') {
+        const ags = await buscarAgendamentosCliente(phone);
+        let alvo = null;
+        if (ags.length === 1) alvo = ags[0];
+        else if (ags.length > 1) alvo = ags.find(a => (!args.data || a.data === args.data) && (!args.hora || a.hora.slice(0,5) === String(args.hora||"").slice(0,5)));
+        if (!alvo) {
+          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: ags.length === 0 ? "sem_agendamentos" : "precisa_identificar", agendamentos: ags.map(a => rotuloAgendamento(a, professionals)) }) });
+        } else {
+          try {
+            await cancelarAgendamentoDB(alvo.id);
+            console.log(`[cancelar] ${alvo.id} cancelado`);
+            conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: true, cancelado: rotuloAgendamento(alvo, professionals) }) });
+          } catch (e) {
+            conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, erro: e.message }) });
+          }
+        }
+      } else if (funcName === 'remarcarAgendamento') {
+        const ags = await buscarAgendamentosCliente(phone);
+        let alvo = null;
+        if (ags.length === 1) alvo = ags[0];
+        else if (ags.length > 1) alvo = ags.find(a => (!args.data || a.data === args.data) && (!args.hora || a.hora.slice(0,5) === String(args.hora||"").slice(0,5)));
+        let novaData = (args.nova_data && /^\d{4}-\d{2}-\d{2}$/.test(args.nova_data)) ? args.nova_data : parseDataRelativa(String(args.nova_data||"").toLowerCase());
+        let novaHora = null;
+        if (args.nova_hora) { const mh = String(args.nova_hora).match(/^(\d{1,2}):?(\d{2})?$/); if (mh) novaHora = String(Math.min(23, parseInt(mh[1]))).padStart(2,"0") + ":" + (mh[2] || "00").padStart(2,"0"); }
+        if (!alvo) {
+          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: ags.length === 0 ? "sem_agendamentos" : "precisa_identificar", agendamentos: ags.map(a => rotuloAgendamento(a, professionals)) }) });
+        } else if (!novaData || !novaHora) {
+          conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, motivo: "falta_nova_data_hora" }) });
+        } else {
+          try {
+            await remarcarAgendamentoDB(alvo.id, novaData, novaHora);
+            console.log(`[remarcar] ${alvo.id} -> ${novaData} ${novaHora}`);
+            conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: true, remarcado: { de: rotuloAgendamento(alvo, professionals), para: novaData + " " + novaHora } }) });
+          } catch (e) {
+            conv.history.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify({ success: false, erro: e.message }) });
+          }
+        }
       }
     }
 
