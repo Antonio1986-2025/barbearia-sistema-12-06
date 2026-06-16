@@ -1042,20 +1042,47 @@ async function baixarMidiaBase64(message) {
  * Transcreve Ã¡udio (base64) usando OpenAI Whisper.
  */
 async function transcreverAudio(base64, mimetype = 'audio/ogg') {
+  const timeout = (ms) => new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('Timeout de transcrição')), ms)
+  );
+
   try {
+    console.log('🎙️ Iniciando transcrição com Whisper...');
+    const startTime = Date.now();
+    
     const { toFile } = await import('openai');
     const buffer = Buffer.from(base64, 'base64');
     const ext = mimetype.includes('mp3') ? 'mp3' : mimetype.includes('mp4') ? 'mp4' : mimetype.includes('wav') ? 'wav' : 'ogg';
     const file = await toFile(buffer, `audio.${ext}`, { type: mimetype || 'audio/ogg' });
-    const result = await openai.audio.transcriptions.create({
-      file,
-      model: 'whisper-1',
-      language: 'pt',
-    });
-    return result.text?.trim() || '';
+    
+    // Timeout de 15 segundos
+    const transcription = await Promise.race([
+      openai.audio.transcriptions.create({
+        file,
+        model: 'whisper-1',
+        language: 'pt',
+      }),
+      timeout(15000)
+    ]);
+    
+    const elapsed = Date.now() - startTime;
+    const text = transcription.text?.trim() || '';
+    
+    if (text) {
+      console.log(`✅ Transcrição completa em ${elapsed}ms: "${text.slice(0, 50)}..."`);
+    } else {
+      console.warn('⚠️ Transcrição vazia');
+    }
+    
+    return text;
   } catch (err) {
-    console.error('âŒ Erro ao transcrever Ã¡udio:', err.message);
-    return '';
+    console.error('❌ Erro na transcrição:', err.message);
+    
+    if (err.message === 'Timeout de transcrição') {
+      console.error('⏱️ Whisper demorou mais de 15 segundos');
+    }
+    
+    return null; // Retorna null ao invés de crashear
   }
 }
 
