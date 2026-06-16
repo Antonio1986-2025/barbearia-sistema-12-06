@@ -779,6 +779,8 @@ async function processarMensagem(phone, userMessage) {
   const _temTudo = !!(_ctxC.nome && _ctxC.prof_id && _ctxC.servico_id && _ctxC.data && _ctxC.hora);
   const _afirma = /^(sim|isso|isso mesmo|pode|pode confirmar|pode sim|pode marcar|pode agendar|confirma|confirmar|confirmado|claro|perfeito|ok|okay|fechado|fechou|beleza|positivo|com certeza|aham|uhum)\b/i.test(String(userMessage).trim());
   let deveConfirmar = _temTudo && _afirma && !conv._modoGestao;
+  console.log(`[DEBUG CONF] _temTudo=${_temTudo} _afirma=${_afirma} _modoGestao=${!!conv._modoGestao}`);
+  console.log(`[DEBUG CTX] nome=${!!_ctxC.nome} prof=${_ctxC.prof_id} svc=${_ctxC.servico_id} data=${_ctxC.data} hora=${_ctxC.hora}`);
   if (deveConfirmar) console.log("[confirmacao] deterministica: cliente confirmou e dados completos");
   const houveToolCalls = !!(assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0);
   if (houveToolCalls) {
