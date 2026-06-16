@@ -1136,17 +1136,34 @@ app.post('/webhook', async (req, res) => {
 
     // ÃUDIO: baixa e transcreve com Whisper
     if (!userMessage && message.message?.audioMessage) {
-      console.log(`ðŸŽµ [${phone}]: Ãudio recebido â€” transcrevendo...`);
-      const midia = await baixarMidiaBase64(message);
-      if (midia?.base64) {
+      console.log(`🎵 [${phone}]: Áudio recebido — transcrevendo...`);
+      
+      try {
+        const midia = await baixarMidiaBase64(message);
+        
+        if (!midia?.base64) {
+          console.error('❌ Falha ao baixar áudio');
+          await sendWhatsApp(phone, 'Desculpe, não consegui baixar o áudio. Pode digitar sua mensagem? 😊');
+          return res.json({ ok: true });
+        }
+        
+        console.log(`📦 Áudio baixado (${midia.mimetype}), transcrevendo...`);
         userMessage = await transcreverAudio(midia.base64, midia.mimetype);
-        console.log(`ðŸ“ [${phone}] TranscriÃ§Ã£o: ${userMessage}`);
-      }
-      if (!userMessage && message.message.audioMessage.transcript) {
-        userMessage = message.message.audioMessage.transcript;
-      }
-      if (!userMessage) {
-        await sendWhatsApp(phone, 'Não consegui entender o áudio 😕 Pode escrever ou enviar de novo?');
+        
+        if (!userMessage) {
+          console.error('❌ Transcrição retornou vazio');
+          await sendWhatsApp(phone, 'Desculpe, não consegui processar o áudio. Pode digitar sua mensagem? 😊');
+          return res.json({ ok: true });
+        }
+        
+        console.log(`📝 [${phone}]: Transcrição OK: "${userMessage.slice(0, 50)}..."`);
+      } catch (audioErr) {
+        console.error('❌ ERRO CRÍTICO no processamento de áudio:', audioErr.message, audioErr.stack);
+        try {
+          await sendWhatsApp(phone, 'Desculpe, tive um problema ao processar o áudio. Pode digitar? 😊');
+        } catch (sendErr) {
+          console.error('❌ Erro ao enviar mensagem de erro:', sendErr);
+        }
         return res.json({ ok: true });
       }
     }
