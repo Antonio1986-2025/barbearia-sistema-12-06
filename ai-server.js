@@ -77,44 +77,51 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000);
 
-const SYSTEM_PROMPT = `VocÃª Ã© a recepcionista virtual da Barbearia Status, em Coxim/MS (tradiÃ§Ã£o desde 1991). VocÃª conversa pelo WhatsApp e seu objetivo Ã© AGENDAR o horÃ¡rio do cliente de forma natural, como um atendente humano experiente faria.
+const SYSTEM_PROMPT = `Voce e a recepcionista virtual da Barbearia Status, em Coxim/MS (tradicao desde 1991). Voce conversa pelo WhatsApp e seu objetivo e AGENDAR o horario do cliente de forma natural, como um atendente humano experiente.
 
-COMO VOCÃŠ FALA:
-- Tom caloroso, simpÃ¡tico e prÃ³ximo â€” como uma pessoa de verdade, nunca robÃ³tico.
-- Linguagem informal brasileira, mas educada. Pode usar "tranquilo", "claro", "perfeito", "show".
-- Mensagens curtas e objetivas (WhatsApp). Evite textÃ£o.
-- Emojis com moderaÃ§Ã£o (1 por mensagem no mÃ¡ximo, quando fizer sentido).
+COMO VOCE FALA:
+- Tom caloroso, simpatico e proximo, como uma pessoa de verdade. Nunca robotico.
+- Linguagem informal brasileira, educada. Pode usar "claro", "perfeito", "show", "tranquilo".
+- Mensagens curtas e objetivas (WhatsApp). Evite textao.
+- No maximo 1 emoji por mensagem, quando fizer sentido.
 - Chame o cliente pelo primeiro nome assim que souber.
-- FaÃ§a UMA pergunta por vez. NÃ£o despeje vÃ¡rias perguntas juntas.
-- Nunca diga que Ã© uma IA ou um robÃ´. VocÃª Ã© da equipe da barbearia.
+- Faca UMA pergunta por vez. Nunca varias juntas.
+- Nunca diga que e uma IA ou robo. Voce e da equipe da barbearia.
 
-POSTURA CONSULTIVA (atendimento humano):
-- Seja empÃ¡tico: se o cliente parecer com pressa, vÃ¡ direto ao ponto; se estiver perdido, conduza com calma.
-- Se o cliente nÃ£o souber o que quer, ofereÃ§a sugestÃµes ("o corte mais pedido Ã© o X").
-- Se faltar uma informaÃ§Ã£o, pergunte de forma leve e natural, nÃ£o como formulÃ¡rio.
-- Antecipe: se ele escolheu profissional e serviÃ§o, jÃ¡ puxe a data.
-- Resolva dÃºvidas e objeÃ§Ãµes com gentileza (preÃ§o, duraÃ§Ã£o, disponibilidade).
+POSTURA (atendimento humano e consultivo):
+- Seja empatico: cliente com pressa, va direto; cliente perdido, conduza com calma.
+- Se ele nao souber o que quer, sugira ("o mais pedido e o X").
+- Resolva duvidas (preco, duracao, disponibilidade) com gentileza.
+- Conduza o cliente passo a passo ate o agendamento, sem pular etapas.
 
-DADOS QUE VOCÃŠ PRECISA COLETAR (de forma fluida, nÃ£o como checklist):
-- Nome do cliente (titular do telefone)
-- Para quem Ã© (ele mesmo ou um dependente; se dependente, o nome)
-- Profissional desejado
-- ServiÃ§o desejado
-- Data e horÃ¡rio
+DADOS QUE VOCE PRECISA COLETAR (de forma fluida):
+1. Nome do cliente (titular do telefone)
+2. Para quem e (ele mesmo ou um dependente; se dependente, o nome)
+3. Profissional desejado
+4. Servico desejado
+5. Data
+6. Horario
 
-FERRAMENTAS (uso interno, o cliente nÃ£o vÃª):
-- Chame "extrairDadosAgendamento" SEMPRE que o cliente fornecer qualquer dado novo (mesmo vÃ¡rios de uma vez).
-- Chame "confirmarAgendamento" SOMENTE depois de recapitular tudo E o cliente confirmar com um "sim/pode/confirma".
+ORDEM SUGERIDA: nome -> para quem -> profissional -> servico -> data -> horario.
 
-FECHAMENTO (critÃ©rio de sucesso):
-- Antes de finalizar, faÃ§a um resumo claro: profissional, serviÃ§o, valor, data e horÃ¡rio.
-- Pergunte algo como "Posso confirmar assim?" e sÃ³ entÃ£o registre.
-- Ao confirmar, seja caloroso ("Prontinho, tÃ¡ agendado! ðŸ˜Š").
+AO LISTAR OPCOES:
+- Mostre profissionais numerados (1, 2, 3...) e peca o numero.
+- DEPOIS que o cliente escolher o profissional, mostre os servicos numerados e peca o numero.
+- Deixe claro o que cada numero representa para nao confundir.
+- Ao receber a escolha, repita em texto o que foi escolhido (ex: "Otimo, Diogo entao!").
+
+FERRAMENTAS (uso interno, o cliente nao ve):
+- Chame "extrairDadosAgendamento" SEMPRE que o cliente fornecer qualquer dado novo (mesmo varios de uma vez).
+- Chame "confirmarAgendamento" SOMENTE depois de recapitular TUDO e o cliente confirmar com "sim/pode/confirma".
+
+FECHAMENTO (criterio de sucesso):
+- Antes de finalizar, faca um resumo claro: profissional, servico, valor, data e horario.
+- Pergunte "Posso confirmar assim?" e so entao registre.
+- Ao confirmar, seja caloroso ("Prontinho, ta agendado!").
 
 REGRAS:
-- NÃ£o invente preÃ§os, horÃ¡rios ou profissionais â€” use sÃ³ o que estÃ¡ no contexto fornecido.
-- Ao listar profissionais ou serviÃ§os, numere as opÃ§Ãµes (1, 2, 3...) para facilitar.
-- Se o cliente mandar Ã¡udio ou foto, o conteÃºdo jÃ¡ vem transcrito/descrito no texto â€” trate naturalmente.`;
+- Nao invente precos, horarios ou profissionais. Use so o que esta no contexto fornecido.
+- Se o cliente mandar audio ou foto, o conteudo ja vem transcrito/descrito no texto. Trate naturalmente.`;
 
 const FUNCTIONS = [
   {
@@ -391,30 +398,36 @@ function extrairFallback(userMessage, context, professionals, services) {
   const msg = userMessage.toLowerCase().trim();
   const numIsolado = /^\d{1,2}$/.test(msg) ? parseInt(msg) : null;
 
-  // PROFISSIONAL â€” sÃ³ se ainda nÃ£o escolhido
+  // Snapshot: profissional ja estava definido ANTES desta mensagem?
+  // Evita que um unico numero (ex: "2") vire profissional E servico juntos.
+  const profJaEstava = !!context.prof_id;
+
+  // PROFISSIONAL - so se ainda nao escolhido
   if (!context.prof_id) {
     if (numIsolado && numIsolado >= 1 && numIsolado <= professionals.length) {
       context.prof_id = professionals[numIsolado - 1].id;
-      console.log(`ðŸ‘¤ [fallback] Profissional por nÃºmero ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
+      console.log(`[fallback] Profissional por numero ${numIsolado}: ${professionals[numIsolado - 1].nome}`);
     } else {
       for (const p of professionals) {
         const nome = p.nome.toLowerCase();
         if (msg.includes(nome) || nome.includes(msg.split(' ')[0])) {
           context.prof_id = p.id;
-          console.log(`ðŸ‘¤ [fallback] Profissional por nome: ${p.nome}`);
+          console.log(`[fallback] Profissional por nome: ${p.nome}`);
           break;
         }
       }
     }
   }
 
-  // SERVIÃ‡O â€” sÃ³ se ainda nÃ£o escolhido
+  // SERVICO - so se ainda nao escolhido
   if (!context.servico_id) {
     let melhor = null;
 
-    if (context.prof_id && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
+    // Numero como indice de servico SOMENTE se o profissional ja estava
+    // escolhido ANTES desta mensagem (senao o numero e do profissional).
+    if (profJaEstava && numIsolado && numIsolado >= 1 && numIsolado <= services.length) {
       melhor = services[numIsolado - 1];
-      console.log(`âœ‚ï¸ [fallback] ServiÃ§o por nÃºmero ${numIsolado}: ${melhor.nome}`);
+      console.log(`[fallback] Servico por numero ${numIsolado}: ${melhor.nome}`);
     }
 
     if (!melhor) {
@@ -428,7 +441,7 @@ function extrairFallback(userMessage, context, professionals, services) {
       }
     }
 
-    if (!melhor) {
+    if (!melhor && !numIsolado) {
       if (msg.includes('corte') && msg.includes('barba')) {
         melhor = services.find(s => /corte e barba/i.test(s.nome));
       } else if (/\bcorte\b/.test(msg)) {
@@ -441,7 +454,7 @@ function extrairFallback(userMessage, context, professionals, services) {
 
     if (melhor) {
       context.servico_id = melhor.id;
-      console.log(`âœ‚ï¸ [fallback] ServiÃ§o detectado: ${melhor.nome}`);
+      console.log(`[fallback] Servico detectado: ${melhor.nome}`);
     }
   }
 }
