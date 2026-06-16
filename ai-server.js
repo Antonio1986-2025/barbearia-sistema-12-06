@@ -306,8 +306,11 @@ async function cancelarComandaDoCliente(clienteNome) {
     .limit(1)
     .maybeSingle();
   if (!cmd) return false;
-  await supabase.from("commands").update({ status: "cancelada" }).eq("id", cmd.id);
-  console.log("[cancelar] comanda #" + cmd.numero + " cancelada (cliente: " + clienteNome + ")");
+  // Deleta os itens primeiro (FK constraint)
+  await supabase.from("command_items").delete().eq("command_id", cmd.id);
+  // Deleta a comanda
+  await supabase.from("commands").delete().eq("id", cmd.id);
+  console.log("[cancelar] comanda #" + cmd.numero + " DELETADA (cliente: " + clienteNome + ")");
   return true;
 }
 
