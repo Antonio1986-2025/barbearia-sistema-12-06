@@ -101,6 +101,7 @@ EXEMPLOS RUINS (NUNCA FACA):
 ❌ "Posso confirmar assim?"
 
 SEU OBJETIVO: AGENDAR (mas com flexibilidade total)
+IMPORTANTE: Sempre chame "extrairDadosAgendamento" quando o cliente fornecer informacoes (nome, profissional, servico, data, hora). NAO confirme sem extrair os dados antes!
 - Voce tem liberdade para conduzir a conversa naturalmente
 - NAO ha ordem fixa de perguntas - adapte ao que o cliente ja informou
 - Cliente perguntou algo fora do contexto? Responda brevemente e volte ao agendamento
@@ -277,6 +278,24 @@ async function buscarClienteCadastrado(tel) {
     .eq("tel", cleanPhone)
     .maybeSingle();
   return data || null;
+}
+
+async function buscarHistoricoCliente(tel) {
+  const cleanPhone = String(tel).replace(/\D/g, "");
+  const { data } = await supabase
+    .from("appointments")
+    .select("servico, prof_id, data")
+    .eq("tel", cleanPhone)
+    .eq("status", "agendado")
+    .order("data", { ascending: false })
+    .limit(5);
+  if (!data || data.length === 0) return null;
+  // Analisa padroes
+  const servicos = data.map(a => a.servico);
+  const profs = data.map(a => a.prof_id);
+  const servicoMaisComum = servicos.sort((a,b) => servicos.filter(v => v===a).length - servicos.filter(v => v===b).length).pop();
+  const profMaisComum = profs.sort((a,b) => profs.filter(v => v===a).length - profs.filter(v => v===b).length).pop();
+  return { total: data.length, servicoPreferido: servicoMaisComum, profissionalPreferido: profMaisComum, ultimo: data[0] };
 }
 
 async function buscarAgendamentosCliente(tel) {
@@ -637,8 +656,15 @@ function extrairFallback(userMessage, context, professionals, services) {
       if (msg.includes('corte') && msg.includes('barba')) {
         melhor = services.find(s => /corte e barba/i.test(s.nome));
       } else if (/\bcorte\b/.test(msg)) {
-        melhor = services.find(s => /corte/i.test(s.nome) && !/barba|sobrancelha/i.test(s.nome))
-              || services.find(s => /corte/i.test(s.nome));
+        // Prioriza masculino se cliente tem historico masculino OU se nao especificou
+        const temHistMasc = context._historico?.servicoPreferido?.toLowerCase().includes("masculino");
+        if (temHistMasc || !msg.includes("feminino")) {
+          melhor = services.find(s => /corte masculino/i.test(s.nome))
+                || services.find(s => /corte/i.test(s.nome) && /masculino/i.test(s.nome))
+                || services.find(s => /corte/i.test(s.nome) && !/feminino/i.test(s.nome));
+        } else {
+          melhor = services.find(s => /corte/i.test(s.nome));
+        }
       } else if (/\bbarba\b/.test(msg)) {
         melhor = services.find(s => /^barba/i.test(s.nome));
       }
@@ -655,6 +681,9 @@ function montarContextInfo(context, professionals, services, settings, livres, a
   let info = `\n\nDATA ATUAL: ${hojeBrasilISO()}\n`;
   if (context._cadastrado) {
     info += `\nCLIENTE JA CADASTRADO: ${context._cadastrado} (${context._visitas || 0} visita(s) anteriores). Cumprimente-o pelo primeiro nome de forma calorosa e NAO pergunte o nome de novo. Se o agendamento for para ele mesmo, ja use este nome.\n`;
+    if (context._historico) {
+      info += `HISTORICO/PREFERENCIAS: Cliente costuma agendar "${context._historico.servicoPreferido}". Se ele pedir algo generico como "corte", ja sugira este servico.\n`;
+    }
   } else {
     info += `\nCLIENTE NOVO: ainda nao ha cadastro para este numero. Pergunte o nome de forma simpatica quando precisar.\n`;
   }
@@ -711,7 +740,7 @@ async function processarMensagem(phone, userMessage) {
   }
   conv.lastUpdate = Date.now();
 
-  // Consulta o cadastro do cliente (uma vez por conversa) para cumprimentar pelo nome
+  // Consulta cadastro E historico do cliente (uma vez por conversa)
   if (!conv._clienteChecado) {
     conv._clienteChecado = true;
     try {
@@ -723,6 +752,12 @@ async function processarMensagem(phone, userMessage) {
         console.log("[cliente] cadastrado: " + cli.nome + " (" + (cli.visitas || 0) + " visita(s))");
       } else {
         console.log("[cliente] sem cadastro para " + phone);
+      }
+      // Busca historico de agendamentos
+      const hist = await buscarHistoricoCliente(phone);
+      if (hist) {
+        conv.context._historico = hist;
+        console.log("[historico] " + hist.total + " agendamento(s) anterior(es). Preferencia: " + hist.servicoPreferido);
       }
     } catch (e) { console.warn("[cliente] aviso lookup:", e.message); }
   }
