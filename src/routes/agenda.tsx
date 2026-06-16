@@ -150,9 +150,12 @@ function AgendaPage() {
       </div>
 
       <div className="bs-card overflow-auto rounded-xl">
-        <div className="hidden md:grid min-w-[800px]" style={{
-          gridTemplateColumns: `68px repeat(${pros.length}, 1fr)`,
-        }}>
+        <div className="hidden md:block">
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: `68px repeat(${pros.length}, 1fr)`,
+            minWidth: 800,
+          }}>
           <div className="sticky top-0 z-10 bg-[#1a1408] border-b border-amber-800/40 p-2.5 text-[11px] font-bold text-amber-500/60 uppercase tracking-[0.15em] flex items-center justify-center">Hora</div>
           {pros.map((p, i) => (
             <div key={p.id} className={`sticky top-0 z-10 bg-[#1a1408] border-b border-amber-800/40 ${i > 0 ? 'border-l border-amber-800/20' : ''} p-2.5 flex items-center gap-2.5`}>
@@ -168,6 +171,7 @@ function AgendaPage() {
               onAppt={(a) => setOpenDetail(a)}
             />
           ))}
+          </div>
         </div>
 
         <div className="block md:hidden">
