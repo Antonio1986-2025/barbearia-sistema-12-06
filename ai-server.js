@@ -524,7 +524,7 @@ async function processarMensagem(phone, userMessage) {
     });
   } catch (err) {
     console.error('[ERRO] OpenAI principal:', err?.message, err?.stack);
-    await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? ðŸ˜…');
+    await sendWhatsApp(phone, 'Ops, tive um problema. Pode tentar novamente em instantes? 😅');
     return;
   }
 
@@ -575,7 +575,7 @@ async function processarMensagem(phone, userMessage) {
         console.log('ðŸŽ¯ Tentando criar agendamento...');
         const { appt, pro, svc } = await criarAgendamento(conv.context);
         const dataFormatada = new Date(conv.context.data + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
-        const mensagemFinal = `âœ… *Agendamento confirmado!*\n\nðŸŽ‰ Seu horÃ¡rio estÃ¡ garantido!\n\nðŸ“‹ *Detalhes:*\nâ€¢ ${dataFormatada}\nâ€¢ HorÃ¡rio: ${conv.context.hora}\nâ€¢ ServiÃ§o: ${svc.nome}\nâ€¢ Profissional: ${pro.nome}\nâ€¢ Valor: R$ ${Number(svc.preco).toFixed(2)}\n\nðŸ“ *Barbearia Status*\nCoxim, MS\n\nAtÃ© lÃ¡! âœ‚ï¸`;
+        const mensagemFinal = `✅ *Agendamento confirmado!*\n\n🎉 Seu horário está garantido!\n\n📋 *Detalhes:*\n• ${dataFormatada}\n• Horário: ${conv.context.hora}\n• Serviço: ${svc.nome}\n• Profissional: ${pro.nome}\n• Valor: R$ ${Number(svc.preco).toFixed(2)}\n\n📍 *Barbearia Status*\nCoxim, MS\n\nAté lá! ✂️`;
         await sendWhatsApp(phone, mensagemFinal);
         console.log(`ðŸŽ‰ Agendamento ${appt.id} criado com sucesso!`);
         setTimeout(() => { conversations.delete(phone); console.log(`ðŸ§¹ Conversa de ${phone} limpa`); }, 5000);
@@ -615,7 +615,7 @@ async function processarMensagem(phone, userMessage) {
       }
     } catch (err) {
       console.error('[ERRO] follow-up OpenAI:', err?.message, err?.stack);
-      await sendWhatsApp(phone, 'Posso ajudar com mais alguma informaÃ§Ã£o? ðŸ˜Š');
+      await sendWhatsApp(phone, 'Posso ajudar com mais alguma informação? 😊');
     }
   } else if (assistantMessage.content) {
     await sendWhatsApp(phone, assistantMessage.content);
@@ -735,7 +735,7 @@ app.post('/webhook', async (req, res) => {
         userMessage = message.message.audioMessage.transcript;
       }
       if (!userMessage) {
-        await sendWhatsApp(phone, 'NÃ£o consegui entender o Ã¡udio ðŸ˜• Pode escrever ou enviar de novo?');
+        await sendWhatsApp(phone, 'Não consegui entender o áudio 😕 Pode escrever ou enviar de novo?');
         return res.json({ ok: true });
       }
     }
@@ -753,7 +753,7 @@ app.post('/webhook', async (req, res) => {
           : `[O cliente enviou uma imagem: ${descricao}]`;
       }
       if (!userMessage) {
-        await sendWhatsApp(phone, 'Recebi sua imagem mas nÃ£o consegui processÃ¡-la ðŸ˜• Pode descrever o que deseja?');
+        await sendWhatsApp(phone, 'Recebi sua imagem mas não consegui processá-la 😕 Pode descrever o que deseja?');
         return res.json({ ok: true });
       }
     }
