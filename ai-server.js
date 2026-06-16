@@ -777,6 +777,7 @@ async function processarMensagem(phone, userMessage) {
 
   // Checa se cliente afirmou (antes de processar tools)
   const _afirma = /^(sim|isso|isso mesmo|pode|pode confirmar|pode sim|pode marcar|pode agendar|confirma|confirmar|confirmado|claro|perfeito|ok|okay|fechado|fechou|beleza|positivo|com certeza|aham|uhum)\b/i.test(String(userMessage).trim());
+  let deveConfirmar = false; // Pode ser setado por tool confirmarAgendamento OU por confirmacao deterministica
   const houveToolCalls = !!(assistantMessage.tool_calls && assistantMessage.tool_calls.length > 0);
   if (houveToolCalls) {
 
@@ -869,7 +870,7 @@ async function processarMensagem(phone, userMessage) {
   // CONFIRMACAO DETERMINISTICA: Agora que tools processaram, checa se deve confirmar
   const _ctxC = conv.context;
   const _temTudo = !!(_ctxC.nome && _ctxC.prof_id && _ctxC.servico_id && _ctxC.data && _ctxC.hora);
-  let deveConfirmar = _temTudo && _afirma && !conv._modoGestao;
+  if (!deveConfirmar) deveConfirmar = _temTudo && _afirma && !conv._modoGestao; // So seta se tool nao setou antes
   console.log(`[DEBUG CONF FINAL] _temTudo=${_temTudo} _afirma=${_afirma}`);
   console.log(`[DEBUG CTX FINAL] nome=${!!_ctxC.nome} prof=${_ctxC.prof_id} svc=${_ctxC.servico_id} data=${_ctxC.data} hora=${_ctxC.hora}`);
   if (deveConfirmar) console.log("[confirmacao] DETERMINISTICA ATIVADA: criando agendamento");
